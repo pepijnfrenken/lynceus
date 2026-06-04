@@ -1,5 +1,9 @@
 # humanify
 
+<p align="center">
+  <img src="assets/humanify-mascot.svg" alt="A friendly robot inspecting highlighted writing in a terminal window" width="820">
+</p>
+
 `humanify` is a local-first command-line analyzer for spotting text that is statistically similar to modern AI-generated writing. It scores each sentence, highlights passages worth reviewing, reports repeated AI-like markers, measures sentence-score variation, and can return either rich terminal output or JSON for automation.
 
 Use it as a writing-quality and risk-review signal, not as proof of authorship.
