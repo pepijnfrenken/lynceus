@@ -5,6 +5,7 @@ based on the statistical analysis results from the detection pipeline.
 """
 
 from collections import Counter
+import re
 
 import torch
 
@@ -55,6 +56,43 @@ Highest AI-scored sentences:
 Give concise, direct advice. Be specific to this text."""
 
 
+def _format_generation_prompt(tokenizer, prompt: str) -> str:
+    """Apply a chat template when available, disabling model reasoning if supported."""
+    apply_chat_template = getattr(tokenizer, "apply_chat_template", None)
+    if apply_chat_template is None:
+        return prompt
+
+    messages = [{"role": "user", "content": prompt}]
+    try:
+        return apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            enable_thinking=False,
+            tokenize=False,
+        )
+    except TypeError:
+        return apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=False,
+        )
+
+
+def _pad_token_id(tokenizer) -> int:
+    """Return pad token id without treating token id 0 as missing."""
+    return tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
+
+
+def _strip_think_blocks(text: str) -> str:
+    """Remove closed or truncated model reasoning blocks."""
+    return re.sub(
+        r"<think>.*?(?:</think>|$)",
+        "",
+        text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+
+
 def generate_llm_advice(model, tokenizer, device, sentences, probs, markers, stats, threshold) -> str:
     """Generate writing advice using a causal LM.
 
@@ -69,7 +107,9 @@ def generate_llm_advice(model, tokenizer, device, sentences, probs, markers, sta
     """
     prompt = _build_prompt(sentences, probs, markers, stats, threshold)
 
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True,
+    formatted_prompt = _format_generation_prompt(tokenizer, prompt)
+
+    inputs = tokenizer(formatted_prompt, return_tensors="pt", truncation=True,
                        max_length=1024, return_token_type_ids=False).to(device)
 
     with torch.no_grad():
@@ -77,15 +117,14 @@ def generate_llm_advice(model, tokenizer, device, sentences, probs, markers, sta
             **inputs,
             max_new_tokens=300,
             do_sample=False,
-            pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
+            pad_token_id=_pad_token_id(tokenizer),
         )
 
     # Decode only the generated tokens (not the prompt)
     generated = output_ids[0][inputs["input_ids"].shape[1]:]
     text = tokenizer.decode(generated, skip_special_tokens=True).strip()
 
-    # Strip <think>...</think> blocks (Qwen3.5 generates these by default)
-    import re
-    text = re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL).strip()
+    # Safety net: strip closed or truncated <think> blocks if the model emits them.
+    text = _strip_think_blocks(text)
 
     return text
