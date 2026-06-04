@@ -353,7 +353,7 @@ uv run python -m compileall humanify tests
 Run the CLI locally:
 
 ```bash
-uv run humanify --file test_input.txt
+uv run humanify --file examples/mixed-writing-sample.txt
 ```
 
 ## Adding a detector
