@@ -83,4 +83,9 @@ def generate_llm_advice(model, tokenizer, device, sentences, probs, markers, sta
     # Decode only the generated tokens (not the prompt)
     generated = output_ids[0][inputs["input_ids"].shape[1]:]
     text = tokenizer.decode(generated, skip_special_tokens=True).strip()
+
+    # Strip <think>...</think> blocks (Qwen3.5 generates these by default)
+    import re
+    text = re.sub(r"<think>.*?</think>\s*", "", text, flags=re.DOTALL).strip()
+
     return text
