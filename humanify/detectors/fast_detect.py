@@ -80,3 +80,9 @@ class FastDetectDetector(Detector):
 
     def set_model_id(self, model_id: str) -> None:
         self._model_id = model_id
+
+    def get_causal_lm(self) -> tuple | None:
+        """Return loaded causal LM for reuse by advice generator."""
+        if self._model is not None:
+            return (self._model, self._tokenizer, self._device)
+        return None

@@ -36,3 +36,9 @@ class Detector(ABC):
     def set_model_id(self, model_id: str) -> None:
         """Override the default model ID. Not all detectors support this."""
         raise NotImplementedError(f"Detector '{self.name}' does not support --model-id override.")
+
+    def get_causal_lm(self) -> tuple | None:
+        """Return (model, tokenizer, device) if this detector has a causal LM loaded.
+        Returns None for classifiers that don't use a causal LM.
+        Used to reuse the model for LLM-based advice generation."""
+        return None

@@ -43,6 +43,9 @@ def main() -> None:
                         help="AI probability threshold for advice focus (default: 0.5)")
     parser.add_argument("--batch-size", "-b", type=int, default=32,
                         help="Inference batch size (default: 32)")
+    parser.add_argument("--advice", "-a", type=str, default="stats",
+                        choices=["stats", "llm"],
+                        help="Advice mode: stats (rule-based) or llm (AI-generated via causal LM)")
     args = parser.parse_args()
 
     # Read and split input
@@ -93,6 +96,7 @@ def main() -> None:
                 "mean": float(arr.mean()), "std": float(arr.std()),
                 "min": float(arr.min()), "max": float(arr.max()),
             },
+            "detector": det,
         })
 
     # Ensemble: average probabilities across detectors
@@ -112,10 +116,36 @@ def main() -> None:
 
     markers = [find_markers(s) for s in sentences]
 
+    # LLM advice generation (reuse causal LM from detector if available)
+    llm_advice = None
+    if args.advice == "llm":
+        from .advice_llm import generate_llm_advice
+        causal_lm = None
+        for r in detector_results:
+            causal_lm = r["detector"].get_causal_lm()
+            if causal_lm:
+                break
+        if causal_lm is None:
+            # No causal LM loaded — load Qwen3.5-0.8B-Base
+            print("Loading Qwen3.5-0.8B-Base for LLM advice...", file=sys.stderr)
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            from .detectors.fast_detect import _login_hf
+            _login_hf()
+            _adv_tok = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-0.8B-Base")
+            if _adv_tok.pad_token_id is None:
+                _adv_tok.pad_token_id = _adv_tok.eos_token_id
+            dtype = torch.float16 if use_cuda else None
+            _adv_model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3.5-0.8B-Base", dtype=dtype)
+            _adv_model.to(device).eval()
+            causal_lm = (_adv_model, _adv_tok, device)
+        llm_advice = generate_llm_advice(*causal_lm, sentences, probs, markers, stats, args.threshold)
+
     # Output
     if args.json:
         output_json(sentences, probs, markers, stats, args.threshold, model_label,
-                    detector_results=detector_results if len(detector_results) > 1 else None)
+                    detector_results=detector_results if len(detector_results) > 1 else None,
+                    llm_advice=llm_advice)
     else:
         output_rich(sentences, probs, markers, stats, args.threshold, model_label,
-                    detector_results=detector_results if len(detector_results) > 1 else None)
+                    detector_results=detector_results if len(detector_results) > 1 else None,
+                    llm_advice=llm_advice)

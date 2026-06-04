@@ -3,7 +3,6 @@
 import json
 from collections import Counter
 
-import numpy as np
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -47,7 +46,8 @@ def _comparison_table(detector_results: list[dict], ensemble_stats: dict) -> Tex
 
 def output_json(sentences: list[str], probs: list[float], markers: list[list[str]],
                 stats: dict, threshold: float, model_name: str,
-                detector_results: list[dict] | None = None) -> None:
+                detector_results: list[dict] | None = None,
+                llm_advice: str | None = None) -> None:
     """Print machine-readable JSON."""
     tips, focus, all_marks = generate_advice(sentences, probs, markers, stats, threshold)
     top = [{"word": w, "count": c} for w, c in Counter(all_marks).most_common(5)]
@@ -63,8 +63,13 @@ def output_json(sentences: list[str], probs: list[float], markers: list[list[str
         "burstiness": round(stats["std"], 4),
         "stats": {k: round(v, 4) for k, v in stats.items()},
         "sentence_count": len(sentences),
-        "threshold": threshold,
-        "advice": {"tips": tips, "top_markers": top, "focus": focus_data},
+        "advice": {
+            "mode": "llm" if llm_advice else "stats",
+            "tips": tips,
+            "top_markers": top,
+            "focus": focus_data,
+            **({"text": llm_advice} if llm_advice else {}),
+        },
         "disclaimer": "This tool detects statistical similarity to modern AI-generated text. "
                        "It is NOT definitive. Known false positives: formal prose, academic writing, "
                        "legal text, non-native English, and pre-1900 literature. Use as one signal among many.",
@@ -88,7 +93,8 @@ def output_json(sentences: list[str], probs: list[float], markers: list[list[str
 
 def output_rich(sentences: list[str], probs: list[float], markers: list[list[str]],
                 stats: dict, threshold: float, model_name: str,
-                detector_results: list[dict] | None = None) -> None:
+                detector_results: list[dict] | None = None,
+                llm_advice: str | None = None) -> None:
     """Print color-coded rich output with advice."""
     console = Console()
     body = Text()
@@ -135,10 +141,20 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
     tips, focus, _ = generate_advice(sentences, probs, markers, stats, threshold)
     body.append("\n")
     body.append(" " + "\u2500" * 44 + "\n", style="dim")
-    body.append(" Writing Advice\n", style="bold cyan")
+    if llm_advice:
+        body.append(" Writing Advice (AI-generated)\n", style="bold cyan")
+    else:
+        body.append(" Writing Advice\n", style="bold cyan")
     body.append("\n")
-    for tip in tips:
-        body.append(f" {tip}\n", style="yellow" if tip.startswith("\u26a0") else "green")
+
+    if llm_advice:
+        # Render LLM advice as wrapped text
+        for line in llm_advice.split("\n"):
+            body.append(f" {line}\n")
+    else:
+        for tip in tips:
+            body.append(f" {tip}\n", style="yellow" if tip.startswith("\u26a0") else "green")
+
     if focus:
         body.append("\n")
         body.append(" Focus on these sentences:\n", style="bold")

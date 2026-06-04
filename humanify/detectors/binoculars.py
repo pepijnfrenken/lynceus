@@ -125,3 +125,9 @@ class BinocularsDetector(Detector):
             self._performer_id = parts[1]
         else:
             raise ValueError(f"binoculars --model-id expects 'model' or 'observer,performer', got: {model_id}")
+
+    def get_causal_lm(self) -> tuple | None:
+        """Return loaded observer model for reuse by advice generator."""
+        if self._observer_model is not None:
+            return (self._observer_model, self._observer_tokenizer, self._device)
+        return None
