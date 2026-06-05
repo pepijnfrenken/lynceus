@@ -40,11 +40,11 @@ class FastDetectDetector(Detector):
         self._device = device
         self._model.to(device).eval()
 
-    def score(self, sentences: list[str], batch_size: int = 32) -> list[float]:
-        """Score each sentence using Fast-DetectGPT statistic."""
+    def score(self, texts: list[str], batch_size: int = 32) -> list[float]:
+        """Score text segments using Fast-DetectGPT statistic."""
         scores = []
-        for sent in sentences:
-            enc = self._tokenizer(sent, return_tensors="pt", truncation=True,
+        for text in texts:
+            enc = self._tokenizer(text, return_tensors="pt", truncation=True,
                                   max_length=512, return_token_type_ids=False).to(self._device)
             labels = enc.input_ids[:, 1:]
             with torch.no_grad():

@@ -3,6 +3,18 @@
 import re
 import sys
 from collections import Counter
+from dataclasses import dataclass
+
+DEFAULT_MAX_SCORING_WORDS = 320
+
+
+@dataclass(frozen=True, slots=True)
+class ScoringUnit:
+    """Normalized detector input mapped back to a contiguous sentence range."""
+
+    text: str
+    start: int
+    stop: int
 
 # AI filler phrases (case-insensitive substring match)
 AI_FILLERS: set[str] = {
@@ -30,9 +42,14 @@ def find_markers(sentence: str) -> list[str]:
     return sorted({p for p in _AI_FILLERS_LOWER if p in lower})
 
 
+def normalize_for_detection(text: str) -> str:
+    """Collapse presentation whitespace before model scoring."""
+    return re.sub(r"\s+", " ", text.strip())
+
+
 def split_sentences(text: str) -> list[str]:
     """Split text into sentences, skipping empty/whitespace-only and junk fragments."""
-    text = re.sub(r"\s+", " ", text.strip())
+    text = normalize_for_detection(text)
     # Protect abbreviations from triggering splits
     abbrevs = {"vs.": "vs\x00", "e.g.": "eg\x00", "i.e.": "ie\x00", "etc.": "etc\x00"}
     for orig, safe in abbrevs.items():
@@ -41,6 +58,53 @@ def split_sentences(text: str) -> list[str]:
     for orig, safe in abbrevs.items():
         raw = [s.replace(safe, orig) for s in raw]
     return [s for s in (s.strip() for s in raw) if s and len(s) >= 15 and len(s.split()) >= 4]
+
+
+
+def _append_scoring_units(
+    units: list[ScoringUnit],
+    sentences: list[str],
+    start: int,
+    max_words: int,
+) -> None:
+    """Append sentence chunks that keep document context without exceeding model limits."""
+    chunk_start = 0
+    chunk_words = 0
+    chunk: list[str] = []
+
+    for rel_index, sentence in enumerate(sentences):
+        sentence_words = len(sentence.split())
+        if chunk and chunk_words + sentence_words > max_words:
+            units.append(ScoringUnit(" ".join(chunk), start + chunk_start, start + rel_index))
+            chunk = []
+            chunk_start = rel_index
+            chunk_words = 0
+        chunk.append(sentence)
+        chunk_words += sentence_words
+
+    if chunk:
+        units.append(ScoringUnit(" ".join(chunk), start + chunk_start, start + len(sentences)))
+
+
+def prepare_scoring_units(
+    text: str,
+    max_words: int = DEFAULT_MAX_SCORING_WORDS,
+) -> tuple[list[str], list[ScoringUnit]]:
+    """Return display sentences plus normalized document-like detector chunks.
+
+    Classifier detectors are trained on passages, not isolated one-sentence
+    fragments. Scoring whitespace-normalized chunks keeps document context and
+    avoids treating blank-line formatting as model evidence.
+    """
+    if max_words < 1:
+        raise ValueError("max_words must be positive")
+
+    sentences = split_sentences(text)
+    units: list[ScoringUnit] = []
+    if sentences:
+        _append_scoring_units(units, sentences, 0, max_words)
+
+    return sentences, units
 
 
 def read_input(file_path: str | None) -> str:
@@ -72,7 +136,7 @@ def generate_advice(sentences, probs, markers, stats, threshold):
     """
     tips = []
     # 1. Burstiness
-    if stats["std"] < 0.2:
+    if stats["std"] < 0.2 and stats["mean"] >= 0.3:
         tips.append("\u26a0 Burstiness is low \u2014 your sentences all score similarly. "
                     "Mix in more varied phrasing and personal voice.")
     # 2. Long sentences

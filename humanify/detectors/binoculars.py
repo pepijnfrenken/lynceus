@@ -56,12 +56,12 @@ class BinocularsDetector(Detector):
 
         self._device = device
 
-    def score(self, sentences: list[str], batch_size: int = 32) -> list[float]:
-        """Score sentences using Binoculars perplexity ratio."""
+    def score(self, texts: list[str], batch_size: int = 32) -> list[float]:
+        """Score text segments using Binoculars perplexity ratio."""
         scores = []
-        for sent in sentences:
+        for text in texts:
             enc = self._observer_tokenizer(
-                sent, return_tensors="pt", truncation=True, max_length=512,
+                text, return_tensors="pt", truncation=True, max_length=512,
                 return_token_type_ids=False,
             ).to(self._device)
             labels = enc.input_ids[:, 1:]
@@ -74,7 +74,7 @@ class BinocularsDetector(Detector):
                     perf_logits = obs_logits
                 else:
                     perf_enc = self._performer_tokenizer(
-                        sent, return_tensors="pt", truncation=True, max_length=512,
+                        text, return_tensors="pt", truncation=True, max_length=512,
                         return_token_type_ids=False,
                     ).to(self._device)
                     perf_logits = self._performer_model(**perf_enc).logits[:, :-1]

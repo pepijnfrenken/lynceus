@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 class Detector(ABC):
     """Pluggable AI text detector.
 
-    Each detector loads model(s) in `load()` and returns per-sentence
-    AI probabilities (0-1, higher = more AI-like) from `score()`.
+    Each detector loads model(s) in `load()` and returns AI probabilities
+    (0-1, higher = more AI-like) for normalized text segments from `score()`.
     """
 
     @abstractmethod
@@ -15,8 +15,8 @@ class Detector(ABC):
         """Load model(s) onto device. Called once at startup."""
 
     @abstractmethod
-    def score(self, sentences: list[str], batch_size: int = 32) -> list[float]:
-        """Score sentences for AI-likeness. Returns probabilities 0-1."""
+    def score(self, texts: list[str], batch_size: int = 32) -> list[float]:
+        """Score text segments for AI-likeness. Returns probabilities 0-1."""
 
     @property
     @abstractmethod

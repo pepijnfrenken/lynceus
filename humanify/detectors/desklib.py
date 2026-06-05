@@ -47,10 +47,10 @@ class DesklibDetector(Detector):
         self._device = device
         self._model = model.to(device).eval()
 
-    def score(self, sentences: list[str], batch_size: int = 32) -> list[float]:
+    def score(self, texts: list[str], batch_size: int = 32) -> list[float]:
         probs = []
-        for i in range(0, len(sentences), batch_size):
-            batch = sentences[i : i + batch_size]
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
             enc = self._tokenizer(batch, padding=True, truncation=True, max_length=768, return_tensors="pt")
             with torch.no_grad():
                 logits = self._model(

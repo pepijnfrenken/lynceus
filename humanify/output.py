@@ -105,7 +105,7 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
         body.append(" " + "\u2500" * 44 + "\n\n", style="dim")
 
     # Sentence-by-sentence analysis
-    for sent, prob, marks in zip(sentences, probs, markers):
+    for idx, (sent, prob, marks) in enumerate(zip(sentences, probs, markers)):
         color = "green" if prob < 0.3 else ("yellow" if prob < 0.7 else "red")
         icon = "\u2713" if prob < 0.3 else ("\u26a0" if prob < 0.7 else "\u2717")
         display = sent if len(sent) <= 80 else sent[:77] + "..."
@@ -116,7 +116,7 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
         if detector_results:
             body.append("  \u2502 ", style="dim")
             for r in detector_results:
-                p = r["probs"][sentences.index(sent)]
+                p = r["probs"][idx]
                 body.append(f'{r["name"]}: {p * 100:.0f}% ', style="dim")
         body.append("\n")
         if marks and prob >= threshold:

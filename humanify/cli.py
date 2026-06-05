@@ -7,7 +7,7 @@ import sys
 import numpy as np
 import torch
 
-from .analysis import find_markers, generate_advice, read_input, split_sentences
+from .analysis import ScoringUnit, find_markers, generate_advice, prepare_scoring_units, read_input
 from .detectors import DETECTORS, get_detector
 from .output import output_json, output_rich
 
@@ -23,6 +23,36 @@ def _suppress_transformers():
     transformers.logging.set_verbosity(logging.CRITICAL)
     logging.getLogger("transformers").setLevel(logging.CRITICAL)
     logging.getLogger("transformers.modeling_utils").setLevel(logging.CRITICAL)
+
+
+def _resolve_device(name: str) -> tuple[str, bool]:
+    """Map CLI device selection to detector load arguments.
+
+    Do not auto-probe CUDA here. Broken CUDA runtimes can hang inside the first
+    driver call and cannot always be interrupted safely.
+    """
+    return name, name == "cuda"
+
+def _expand_unit_scores(
+    units: list[ScoringUnit],
+    scores: list[float],
+    sentence_count: int,
+) -> list[float]:
+    """Expand paragraph/chunk scores back to one score per display sentence."""
+    if len(scores) != len(units):
+        raise RuntimeError(f"detector returned {len(scores)} score(s) for {len(units)} scoring unit(s)")
+
+    probs: list[float] = []
+    expected_start = 0
+    for unit, score in zip(units, scores):
+        if unit.start != expected_start or unit.stop <= unit.start:
+            raise RuntimeError("internal scoring units are not contiguous")
+        probs.extend([float(score)] * (unit.stop - unit.start))
+        expected_start = unit.stop
+
+    if expected_start != sentence_count:
+        raise RuntimeError("internal scoring units do not cover all sentences")
+    return probs
 
 
 def main() -> None:
@@ -43,24 +73,27 @@ def main() -> None:
                         help="AI probability threshold for advice focus (default: 0.5)")
     parser.add_argument("--batch-size", "-b", type=int, default=32,
                         help="Inference batch size (default: 32)")
+    parser.add_argument("--device", "-d", type=str, default="cpu",
+                        choices=["cpu", "cuda"],
+                        help="Compute device (default: cpu; use cuda only when your CUDA runtime is healthy)")
     parser.add_argument("--advice", "-a", type=str, default="stats",
                         choices=["stats", "llm"],
                         help="Advice mode: stats (rule-based) or llm (AI-generated via causal LM)")
     args = parser.parse_args()
 
-    # Read and split input
+    # Read and prepare input. Detectors score normalized document-like chunks;
+    # scores are expanded back to sentences for highlighting.
     raw = read_input(args.file)
     if not raw.strip():
         print("Error: no input text provided.", file=sys.stderr)
         sys.exit(1)
-    sentences = split_sentences(raw)
+    sentences, scoring_units = prepare_scoring_units(raw)
     if not sentences:
         print("Error: no sentences found.", file=sys.stderr)
         sys.exit(1)
+    score_texts = [unit.text for unit in scoring_units]
 
-    # Device setup
-    use_cuda = torch.cuda.is_available()
-    device = "cuda" if use_cuda else "cpu"
+    device, use_cuda = _resolve_device(args.device)
 
     # Always suppress noisy transformers output
     _suppress_transformers()
@@ -80,13 +113,17 @@ def main() -> None:
         det = get_detector(name)
         if args.model_id:
             det.set_model_id(args.model_id)
-        if args.json:
-            _old_stdout = sys.stdout
-            sys.stdout = sys.stderr
-        det.load(device, fp16=use_cuda)
-        probs = det.score(sentences, batch_size=args.batch_size)
-        if args.json:
-            sys.stdout = _old_stdout
+        _old_stdout = None
+        try:
+            if args.json:
+                _old_stdout = sys.stdout
+                sys.stdout = sys.stderr
+            det.load(device, fp16=use_cuda)
+            unit_probs = det.score(score_texts, batch_size=args.batch_size)
+        finally:
+            if _old_stdout is not None:
+                sys.stdout = _old_stdout
+        probs = _expand_unit_scores(scoring_units, unit_probs, len(sentences))
         arr = np.array(probs)
         detector_results.append({
             "name": name,
@@ -149,3 +186,11 @@ def main() -> None:
         output_rich(sentences, probs, markers, stats, args.threshold, model_label,
                     detector_results=detector_results if len(detector_results) > 1 else None,
                     llm_advice=llm_advice)
+
+    # Some transformer/PyTorch builds can deadlock during interpreter cleanup
+    # after successful CPU inference. Flush the rendered result and skip object
+    # finalization; this is a CLI process and all requested work is complete.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    import os
+    os._exit(0)

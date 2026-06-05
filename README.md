@@ -126,7 +126,8 @@ uv run humanify --advice llm --file examples/mixed-writing-sample.txt
 ```text
 usage: humanify [-h] [--file FILE] [--json] [--model MODEL]
                 [--model-id MODEL_ID] [--threshold THRESHOLD]
-                [--batch-size BATCH_SIZE] [--advice {stats,llm}]
+                [--batch-size BATCH_SIZE] [--device {cpu,cuda}]
+                [--advice {stats,llm}]
 
 Analyze text for AI-like patterns using transformer models.
 
@@ -144,6 +145,9 @@ options:
                         0.5)
   --batch-size, -b BATCH_SIZE
                         Inference batch size (default: 32)
+  --device, -d {cpu,cuda}
+                        Compute device (default: cpu; use cuda only when your
+                        CUDA runtime is healthy)
   --advice, -a {stats,llm}
                         Advice mode: stats (rule-based) or llm (AI-generated
                         via causal LM)
@@ -174,18 +178,18 @@ uv run humanify --model tmr,desklib,fast-detect --file examples/mixed-writing-sa
 
 ### Terminal output
 
-The default rich output shows every sentence with a score and visual status:
+The default rich output shows every sentence with its context-aware score and visual status:
 
 - Green check: below 30% AI probability
 - Yellow warning: 30-70% AI probability
 - Red cross: above 70% AI probability
 
-For sentences above `--threshold`, detected markers are shown below the sentence. The summary includes:
+For sentences above `--threshold`, detected markers are shown below the sentence. Model inference runs on normalized document-like chunks, then maps each chunk score back to its sentences so short fragments and blank-line formatting are not over-weighted. The summary includes:
 
-- Overall AI probability
-- Burstiness, reported as standard deviation across sentence scores
+- Overall AI probability across context-aware sentence scores
+- Burstiness, reported as standard deviation across context-aware sentence scores
 - Sentence count
-- Minimum and maximum sentence scores
+- Minimum and maximum context-aware sentence scores
 - Model or ensemble label
 - Writing advice
 - False-positive disclaimer
@@ -201,9 +205,9 @@ uv run humanify --json --file examples/mixed-writing-sample.txt
 Top-level fields include:
 
 - `model`: model ID or ensemble label
-- `sentences`: per-sentence text, probability, and markers
-- `overall_score`: mean sentence probability
-- `burstiness`: standard deviation of sentence probabilities
+- `sentences`: per-sentence text, context-aware probability, and markers
+- `overall_score`: mean context-aware sentence probability
+- `burstiness`: standard deviation of context-aware sentence probabilities
 - `stats`: mean, standard deviation, minimum, and maximum
 - `sentence_count`: number of analyzed sentences
 - `advice`: deterministic or LLM-generated advice payload
@@ -303,10 +307,12 @@ uv run humanify --batch-size 16 --file examples/mixed-writing-sample.txt
 
 Guidance:
 
+- CPU is the default because some systems report CUDA as available while the
+  first real CUDA driver call hangs.
+- Use `--device cuda` only when your CUDA runtime is known to be healthy.
 - Increase batch size on GPUs with available memory.
 - Decrease batch size if inference runs out of memory.
 - `binoculars` and LLM advice require more memory than classifier-only detection.
-- CPU inference works but can be slow for larger models.
 
 ## Hugging Face authentication
 

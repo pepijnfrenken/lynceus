@@ -22,8 +22,8 @@ class TMRDetector(Detector):
             top_k=None,
         )
 
-    def score(self, sentences: list[str], batch_size: int = 32) -> list[float]:
-        results = self._pipe(sentences, batch_size=batch_size, truncation=True, max_length=512)
+    def score(self, texts: list[str], batch_size: int = 32) -> list[float]:
+        results = self._pipe(texts, batch_size=batch_size, truncation=True, max_length=512)
         probs = []
         for row in results:
             ai_prob = 0.0
