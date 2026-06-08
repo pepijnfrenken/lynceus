@@ -26,6 +26,7 @@ Use it as a writing-quality and risk-review signal, not as proof of authorship.
 - [Output](#output)
 - [Writing advice](#writing-advice)
 - [Model overrides](#model-overrides)
+- [Evaluation mode](#evaluation-mode)
 - [Performance](#performance)
 - [Privacy and data handling](#privacy-and-data-handling)
 - [Development](#development)
@@ -151,7 +152,14 @@ options:
   --advice, -a {stats,llm}
                         Advice mode: stats (rule-based) or llm (AI-generated
                         via causal LM)
+
+### Evaluation subcommand
+
+```bash
+uv run humanify eval --help
 ```
+
+The `eval` subcommand provides batch metrics-only evaluation. It accepts a JSONL input file, optional preference labels for correlation analysis, and outputs per-sample and aggregate JSONL records. See the [Evaluation mode](#evaluation-mode) section for details.
 
 ## Detectors
 
@@ -246,6 +254,111 @@ Example shape:
 ```
 
 Scores in the example are illustrative; actual values depend on the selected detector and model version.
+
+## Evaluation mode
+
+The `eval` subcommand performs batch, metrics-only evaluation of candidate writing against prompts, with optional human preference correlation. It reads JSONL input, writes one JSONL record per sample, and finishes with an aggregate summary record.
+
+**Key differences from single-text analysis:**
+
+- No rewrite advice or detection-avoidance suggestions — output is metrics-only
+- No LLM judge dependency — all metrics are deterministic
+- Batch input via JSONL instead of stdin/file single-text mode
+- Output is always JSONL (no rich terminal output)
+
+### Usage
+
+Basic evaluation:
+
+```bash
+uv run humanify eval --input tests/fixtures/eval_input.jsonl
+```
+
+Evaluation with preference labels for correlation:
+
+```bash
+uv run humanify eval --input tests/fixtures/eval_input.jsonl \\
+    --preferences tests/fixtures/preference_labels.jsonl
+```
+
+Read input from stdin:
+
+```bash
+uv run humanify eval --input -
+```
+
+### Input schema
+
+Each line is a JSON object with the following fields:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | yes | Unique sample identifier |
+| `prompt` | string | yes | Writing prompt or instruction |
+| `candidate` | string | yes | Generated text to evaluate |
+| `reference` | string | no | Optional reference or ground-truth text |
+
+### Preference label schema
+
+Optional `--preferences` file, one JSON object per line:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | yes | Pair identifier |
+| `prompt` | string | yes | Shared writing prompt |
+| `candidate_a` | string | yes | First candidate text |
+| `candidate_b` | string | yes | Second candidate text |
+| `preferred` | string | yes | `"a"`, `"b"`, or `"tie"` |
+
+### Per-sample output
+
+Each output line is a JSON object with these fields:
+
+- `schema_version`: always `1`
+- `type`: `"sample"`
+- `id`: the sample identifier from input
+- `metrics`: object containing `raw` and `normalized` writing metrics (readability, lexical diversity, sentence variety, repetition, coherence rubric, style consistency)
+- `component_scores`: four component scores used in the composite
+  - `preference_rubric` — weighted blend of coherence, style, readability, lexical diversity, and repetition
+  - `readability_style` — mean of readability, lexical diversity, and style consistency
+  - `repetition_variety` — mean of repetition and sentence variety
+  - `humanify_diagnostic` — `1.0 - mean_detector_probability`
+- `composite_score`: final weighted score combining all components
+- `weights_applied`: list of component names that contributed to the composite
+- `detectors`: per-detector name, model ID, and probability stats
+- `errors`: list of error strings (empty on success)
+
+### Summary record
+
+The final output line has `type: "summary"` and contains:
+
+- `sample_count`, `valid_count`, `invalid_count`, `duplicate_id_count`
+- `metrics`: aggregate mean, standard deviation, minimum, and maximum for each metric across all valid samples
+- `weights`: composite weight values used
+- `preference_correlation`: correlation between predicted and human preferences
+  - `pair_count`, `non_tie_count`, `tie_count`
+  - `agreement`: fraction of non-tie pairs where the composite-score prediction matches the human label (`null` when absent)
+  - `pearson`, `spearman`: correlation coefficients for score deltas vs human deltas (`null` when undefined)
+
+When `--preferences` is not provided, `preference_correlation` defaults to:
+```json
+{"pair_count": 0, "non_tie_count": 0, "tie_count": 0, "agreement": null, "pearson": null, "spearman": null}
+```
+
+### Composite formula
+
+```
+composite_score = 0.40 × preference_rubric
+                + 0.25 × readability_style
+                + 0.20 × repetition_variety
+                + 0.15 × humanify_diagnostic
+```
+
+When `humanify_diagnostic` is unavailable (no detector), the remaining weights are renormalized.
+
+### Metrics safety
+
+All writing metrics are computed deterministically using regular expressions and standard Python libraries. No additional model downloads are required. The metrics module does not import `torch`, `transformers`, or any detector classes. Evaluation output never contains rewrite suggestions, detection-avoidance tactics, or LLM-generated advice.
 
 ## Writing advice
 
