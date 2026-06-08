@@ -1,7 +1,30 @@
+import io
 import unittest
+from unittest.mock import patch
 
 from humanify.analysis import ScoringUnit
-from humanify.cli import _expand_unit_scores, _resolve_device
+from humanify.cli import _expand_unit_scores, _main_single, _resolve_device, _score_text
+
+
+class FakeDetector:
+    """Minimal detector stub that returns fixed scores without loading models."""
+    name = "fake"
+    model_id = "fake-model"
+
+    def load(self, device: str, fp16: bool = False) -> None:
+        pass
+
+    def score(self, texts: list[str], batch_size: int = 32) -> list[float]:
+        return [0.3] * len(texts)
+
+    def set_model_id(self, model_id: str) -> None:
+        pass
+
+    def get_causal_lm(self):
+        return None
+
+
+_FAKE_DETECTORS = [{"name": "fake", "detector": FakeDetector(), "model_id": "fake-model"}]
 
 
 class CliDeviceTest(unittest.TestCase):
@@ -30,3 +53,34 @@ class CliScoringUnitTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CliScoreTextTest(unittest.TestCase):
+    def test_score_text_returns_probs_and_stats_with_fake_detector(self):
+        raw = "This is the first sentence here. This is the second sentence there. This is the third sentence everywhere."
+        result = _score_text(raw, loaded_detectors=_FAKE_DETECTORS, batch_size=32)
+
+        self.assertIn("sentences", result)
+        self.assertIn("probs", result)
+        self.assertIn("stats", result)
+        self.assertIn("model_label", result)
+        self.assertIn("markers", result)
+        self.assertEqual(len(result["sentences"]), 3)
+        self.assertEqual(len(result["probs"]), 3)
+        self.assertEqual(result["stats"]["mean"], 0.3)
+        self.assertEqual(result["stats"]["std"], 0.0)
+        self.assertEqual(result["model_label"], "fake-model")
+
+    def test_score_text_does_not_call_advice_functions(self):
+        raw = "This is test sentence number one. This is test sentence number two."
+        with (patch("humanify.analysis.generate_advice", side_effect=Exception("should not be called")),
+              patch("humanify.advice_llm.generate_llm_advice", side_effect=Exception("should not be called"))):
+            result = _score_text(raw, loaded_detectors=_FAKE_DETECTORS, batch_size=32)
+        self.assertEqual(len(result["sentences"]), 2)
+
+    def test_main_single_rejects_empty_input(self):
+        with patch("humanify.cli.read_input", return_value=""):
+            with patch("sys.stderr", new=io.StringIO()) as stderr:
+                ret = _main_single(["--file", "/dev/null"])
+        self.assertEqual(ret, 1)
+        self.assertIn("no input text provided", stderr.getvalue())

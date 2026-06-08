@@ -7,9 +7,10 @@ import sys
 import numpy as np
 import torch
 
-from .analysis import ScoringUnit, find_markers, generate_advice, prepare_scoring_units, read_input
+from .analysis import ScoringUnit, find_markers, prepare_scoring_units, read_input
 from .detectors import DETECTORS, get_detector
 from .output import output_json, output_rich
+import os
 
 
 def _suppress_transformers():
@@ -54,75 +55,67 @@ def _expand_unit_scores(
         raise RuntimeError("internal scoring units do not cover all sentences")
     return probs
 
+def _load_detectors(
+    model_names: list[str],
+    *,
+    model_id: str | None,
+    device_name: str,
+    suppress_stdout: bool = False,
+) -> list[dict]:
+    """Validate detector names, load each detector, return list of result dicts.
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        prog="humanify",
-        description="Analyze text for AI-like patterns using transformer models.",
-    )
-    parser.add_argument("--file", "-f", type=str, default=None,
-                        help="Input file path (default: stdin)")
-    parser.add_argument("--json", "-j", action="store_true",
-                        help="Output machine-readable JSON")
-    parser.add_argument("--model", "-m", type=str, default="tmr",
-                        help=f"Detection method (default: tmr). Comma-separate for ensemble: tmr,fast-detect. "
-                             f"Available: {', '.join(DETECTORS)}")
-    parser.add_argument("--model-id", type=str, default=None,
-                        help="Override default model ID. For binoculars: 'observer,performer'")
-    parser.add_argument("--threshold", "-t", type=float, default=0.5,
-                        help="AI probability threshold for advice focus (default: 0.5)")
-    parser.add_argument("--batch-size", "-b", type=int, default=32,
-                        help="Inference batch size (default: 32)")
-    parser.add_argument("--device", "-d", type=str, default="cpu",
-                        choices=["cpu", "cuda"],
-                        help="Compute device (default: cpu; use cuda only when your CUDA runtime is healthy)")
-    parser.add_argument("--advice", "-a", type=str, default="stats",
-                        choices=["stats", "llm"],
-                        help="Advice mode: stats (rule-based) or llm (AI-generated via causal LM)")
-    args = parser.parse_args()
-
-    # Read and prepare input. Detectors score normalized document-like chunks;
-    # scores are expanded back to sentences for highlighting.
-    raw = read_input(args.file)
-    if not raw.strip():
-        print("Error: no input text provided.", file=sys.stderr)
-        sys.exit(1)
-    sentences, scoring_units = prepare_scoring_units(raw)
-    if not sentences:
-        print("Error: no sentences found.", file=sys.stderr)
-        sys.exit(1)
-    score_texts = [unit.text for unit in scoring_units]
-
-    device, use_cuda = _resolve_device(args.device)
-
-    # Always suppress noisy transformers output
-    _suppress_transformers()
-
-    # Parse model names (comma-separated for ensemble)
-    model_names = [m.strip() for m in args.model.split(",")]
+    Each dict contains ``name``, ``detector`` instance, and ``model_id``.
+    Detectors are loaded onto the resolved device with appropriate dtype.
+    """
     for m in model_names:
         if m not in DETECTORS:
-            print(f"Error: unknown detector '{m}'. Available: {', '.join(DETECTORS)}", file=sys.stderr)
-            sys.exit(1)
+            raise ValueError(f"Unknown detector '{m}'. Available: {', '.join(DETECTORS)}")
 
-    # Load and score with each detector
-    # In JSON mode, redirect stdout to stderr during model loading to suppress
-    # transformers' stdout error messages (they use print() not logging)
-    detector_results = []
+    device, use_cuda = _resolve_device(device_name)
+    _suppress_transformers()
+
+    loaded = []
     for name in model_names:
         det = get_detector(name)
-        if args.model_id:
-            det.set_model_id(args.model_id)
+        if model_id:
+            det.set_model_id(model_id)
         _old_stdout = None
         try:
-            if args.json:
+            if suppress_stdout:
                 _old_stdout = sys.stdout
                 sys.stdout = sys.stderr
             det.load(device, fp16=use_cuda)
-            unit_probs = det.score(score_texts, batch_size=args.batch_size)
         finally:
             if _old_stdout is not None:
                 sys.stdout = _old_stdout
+        loaded.append({
+            "name": name,
+            "detector": det,
+            "model_id": det.model_id,
+        })
+    return loaded
+
+
+def _score_text(
+    raw: str,
+    *,
+    loaded_detectors: list[dict],
+    batch_size: int,
+) -> dict:
+    """Score raw text using pre-loaded detectors.
+
+    Returns a dict with ``sentences``, ``scoring_units``, ``probs``,
+    ``stats``, ``markers``, ``model_label``, and ``detector_results``.
+    Does not generate advice, rewrite suggestions, or use LLMs.
+    """
+    sentences, scoring_units = prepare_scoring_units(raw)
+    score_texts = [unit.text for unit in scoring_units]
+
+    detector_results = []
+    for entry in loaded_detectors:
+        det = entry["detector"]
+        name = entry["name"]
+        unit_probs = det.score(score_texts, batch_size=batch_size)
         probs = _expand_unit_scores(scoring_units, unit_probs, len(sentences))
         arr = np.array(probs)
         detector_results.append({
@@ -152,6 +145,83 @@ def main() -> None:
         model_label = "ensemble(" + ",".join(r["name"] for r in detector_results) + ")"
 
     markers = [find_markers(s) for s in sentences]
+
+    return {
+        "sentences": sentences,
+        "scoring_units": scoring_units,
+        "probs": probs,
+        "stats": stats,
+        "markers": markers,
+        "model_label": model_label,
+        "detector_results": detector_results,
+    }
+
+
+def _main_single(argv: list[str] | None = None) -> int:
+    """Legacy single-text analysis. Returns exit code.
+
+    On success this calls ``os._exit(0)`` to work around PyTorch/Transformer
+    deadlocks during interpreter cleanup. Error paths return a normal int.
+    """
+    parser = argparse.ArgumentParser(
+        prog="humanify",
+        description="Analyze text for AI-like patterns using transformer models.",
+    )
+    parser.add_argument("--file", "-f", type=str, default=None,
+                        help="Input file path (default: stdin)")
+    parser.add_argument("--json", "-j", action="store_true",
+                        help="Output machine-readable JSON")
+    parser.add_argument("--model", "-m", type=str, default="tmr",
+                        help=f"Detection method (default: tmr). Comma-separate for ensemble: tmr,fast-detect. "
+                             f"Available: {', '.join(DETECTORS)}")
+    parser.add_argument("--model-id", type=str, default=None,
+                        help="Override default model ID. For binoculars: 'observer,performer'")
+    parser.add_argument("--threshold", "-t", type=float, default=0.5,
+                        help="AI probability threshold for advice focus (default: 0.5)")
+    parser.add_argument("--batch-size", "-b", type=int, default=32,
+                        help="Inference batch size (default: 32)")
+    parser.add_argument("--device", "-d", type=str, default="cpu",
+                        choices=["cpu", "cuda"],
+                        help="Compute device (default: cpu; use cuda only when your CUDA runtime is healthy)")
+    parser.add_argument("--advice", "-a", type=str, default="stats",
+                        choices=["stats", "llm"],
+                        help="Advice mode: stats (rule-based) or llm (AI-generated via causal LM)")
+    args = parser.parse_args(argv)
+
+    # Read and prepare input. Detectors score normalized document-like chunks;
+    # scores are expanded back to sentences for highlighting.
+    raw = read_input(args.file)
+    if not raw.strip():
+        print("Error: no input text provided.", file=sys.stderr)
+        return 1
+    sentences = prepare_scoring_units(raw)[0]
+    if not sentences:
+        print("Error: no sentences found.", file=sys.stderr)
+        return 1
+
+    device, use_cuda = _resolve_device(args.device)
+
+    # Load detectors using the shared helper
+    try:
+        loaded_detectors = _load_detectors(
+            [m.strip() for m in args.model.split(",")],
+            model_id=args.model_id,
+            device_name=args.device,
+            suppress_stdout=args.json,
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    # Score text using the shared helper (advice-free by design)
+    result = _score_text(raw, loaded_detectors=loaded_detectors, batch_size=args.batch_size)
+
+    sentences = result["sentences"]
+    probs = result["probs"]
+    stats = result["stats"]
+    markers = result["markers"]
+    model_label = result["model_label"]
+    detector_results = result["detector_results"]
 
     # LLM advice generation (reuse causal LM from detector if available)
     llm_advice = None
@@ -192,5 +262,55 @@ def main() -> None:
     # finalization; this is a CLI process and all requested work is complete.
     sys.stdout.flush()
     sys.stderr.flush()
-    import os
     os._exit(0)
+    return 0  # unreachable
+
+
+def _main_eval(argv: list[str]) -> None:
+    """Parse eval subcommand args and run batch evaluator."""
+    parser = argparse.ArgumentParser(
+        prog="humanify eval",
+        description="Batch evaluate text quality with deterministic metrics. "
+                    "Reads JSONL input, emits metrics-only sample and summary records. "
+                    "No rewrite advice or detection-evasion suggestions.",
+    )
+    parser.add_argument("--input", "-i", type=str, required=True,
+                        help="Path to input JSONL file (use '-' for stdin)")
+    parser.add_argument("--preferences", type=str, default=None,
+                        help="Optional path to preference label JSONL")
+    parser.add_argument("--model", "-m", type=str, default="tmr",
+                        help=f"Detection method (default: tmr). Comma-separate for ensemble. "
+                             f"Available: {', '.join(DETECTORS)}")
+    parser.add_argument("--model-id", type=str, default=None,
+                        help="Override default model ID")
+    parser.add_argument("--batch-size", "-b", type=int, default=32,
+                        help="Inference batch size (default: 32)")
+    parser.add_argument("--device", "-d", type=str, default="cpu",
+                        choices=["cpu", "cuda"],
+                        help="Compute device (default: cpu)")
+    args = parser.parse_args(argv)
+
+    from .evaluator import run_eval
+
+    exit_code = run_eval(
+        args.input,
+        args.preferences,
+        model=args.model,
+        model_id=args.model_id,
+        batch_size=args.batch_size,
+        device=args.device,
+        output_stream=sys.stdout,
+        error_stream=sys.stderr,
+    )
+    sys.exit(exit_code)
+
+
+def main(argv: list[str] | None = None) -> None:
+    """CLI entrypoint. Dispatches to eval subcommand or legacy single-text mode."""
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv and argv[0] == "eval":
+        _main_eval(argv[1:])
+        return
+    ret = _main_single(argv)
+    sys.exit(ret)
