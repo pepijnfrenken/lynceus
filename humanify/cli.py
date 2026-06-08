@@ -41,7 +41,9 @@ def _expand_unit_scores(
 ) -> list[float]:
     """Expand paragraph/chunk scores back to one score per display sentence."""
     if len(scores) != len(units):
-        raise RuntimeError(f"detector returned {len(scores)} score(s) for {len(units)} scoring unit(s)")
+        raise RuntimeError(
+            f"detector returned {len(scores)} score(s) for {len(units)} scoring unit(s)"
+        )
 
     probs: list[float] = []
     expected_start = 0
@@ -69,7 +71,9 @@ def _load_detectors(
     """
     for m in model_names:
         if m not in DETECTORS:
-            raise ValueError(f"Unknown detector '{m}'. Available: {', '.join(DETECTORS)}")
+            raise ValueError(
+                f"Unknown detector '{m}'. Available: {', '.join(DETECTORS)}"
+            )
 
     device, use_cuda = _resolve_device(device_name)
     _suppress_transformers()
@@ -172,20 +176,31 @@ def _main_single(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", "-j", action="store_true",
                         help="Output machine-readable JSON")
     parser.add_argument("--model", "-m", type=str, default="tmr",
-                        help=f"Detection method (default: tmr). Comma-separate for ensemble: tmr,fast-detect. "
-                             f"Available: {', '.join(DETECTORS)}")
+                        help=(
+                            f"Detection method (default: tmr). Comma-separate for ensemble: "
+                            f"tmr,fast-detect. Available: {', '.join(DETECTORS)}"
+                        ))
     parser.add_argument("--model-id", type=str, default=None,
-                        help="Override default model ID. For binoculars: 'observer,performer'")
+                        help=(
+                            "Override default model ID. For binoculars: "
+                            "'observer,performer'"
+                        ))
     parser.add_argument("--threshold", "-t", type=float, default=0.5,
                         help="AI probability threshold for advice focus (default: 0.5)")
     parser.add_argument("--batch-size", "-b", type=int, default=32,
                         help="Inference batch size (default: 32)")
     parser.add_argument("--device", "-d", type=str, default="cpu",
                         choices=["cpu", "cuda"],
-                        help="Compute device (default: cpu; use cuda only when your CUDA runtime is healthy)")
+                        help=(
+                            "Compute device (default: cpu; use cuda only when "
+                            "your CUDA runtime is healthy)"
+                        ))
     parser.add_argument("--advice", "-a", type=str, default="stats",
                         choices=["stats", "llm"],
-                        help="Advice mode: stats (rule-based) or llm (AI-generated via causal LM)")
+                        help=(
+                            "Advice mode: stats (rule-based) or llm "
+                            "(AI-generated via causal LM)"
+                        ))
     args = parser.parse_args(argv)
 
     # Read and prepare input. Detectors score normalized document-like chunks;
@@ -214,7 +229,11 @@ def _main_single(argv: list[str] | None = None) -> int:
         return 1
 
     # Score text using the shared helper (advice-free by design)
-    result = _score_text(raw, loaded_detectors=loaded_detectors, batch_size=args.batch_size)
+    result = _score_text(
+        raw,
+        loaded_detectors=loaded_detectors,
+        batch_size=args.batch_size,
+    )
 
     sentences = result["sentences"]
     probs = result["probs"]
@@ -242,20 +261,44 @@ def _main_single(argv: list[str] | None = None) -> int:
             if _adv_tok.pad_token_id is None:
                 _adv_tok.pad_token_id = _adv_tok.eos_token_id
             dtype = torch.float16 if use_cuda else None
-            _adv_model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3.5-0.8B-Base", dtype=dtype)
+            _adv_model = AutoModelForCausalLM.from_pretrained(
+                "Qwen/Qwen3.5-0.8B-Base",
+                dtype=dtype,
+            )
             _adv_model.to(device).eval()
             causal_lm = (_adv_model, _adv_tok, device)
-        llm_advice = generate_llm_advice(*causal_lm, sentences, probs, markers, stats, args.threshold)
+        llm_advice = generate_llm_advice(
+            *causal_lm,
+            sentences,
+            probs,
+            markers,
+            stats,
+            args.threshold,
+        )
 
     # Output
     if args.json:
-        output_json(sentences, probs, markers, stats, args.threshold, model_label,
-                    detector_results=detector_results if len(detector_results) > 1 else None,
-                    llm_advice=llm_advice)
+        output_json(
+            sentences,
+            probs,
+            markers,
+            stats,
+            args.threshold,
+            model_label,
+            detector_results=detector_results if len(detector_results) > 1 else None,
+            llm_advice=llm_advice,
+        )
     else:
-        output_rich(sentences, probs, markers, stats, args.threshold, model_label,
-                    detector_results=detector_results if len(detector_results) > 1 else None,
-                    llm_advice=llm_advice)
+        output_rich(
+            sentences,
+            probs,
+            markers,
+            stats,
+            args.threshold,
+            model_label,
+            detector_results=detector_results if len(detector_results) > 1 else None,
+            llm_advice=llm_advice,
+        )
 
     # Some transformer/PyTorch builds can deadlock during interpreter cleanup
     # after successful CPU inference. Flush the rendered result and skip object
@@ -279,8 +322,10 @@ def _main_eval(argv: list[str]) -> None:
     parser.add_argument("--preferences", type=str, default=None,
                         help="Optional path to preference label JSONL")
     parser.add_argument("--model", "-m", type=str, default="tmr",
-                        help=f"Detection method (default: tmr). Comma-separate for ensemble. "
-                             f"Available: {', '.join(DETECTORS)}")
+                        help=(
+                            f"Detection method (default: tmr). Comma-separate for ensemble. "
+                            f"Available: {', '.join(DETECTORS)}"
+                        ))
     parser.add_argument("--model-id", type=str, default=None,
                         help="Override default model ID")
     parser.add_argument("--batch-size", "-b", type=int, default=32,
