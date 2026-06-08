@@ -21,7 +21,10 @@ def _comparison_table(detector_results: list[dict], ensemble_stats: dict) -> Tex
         t.append(f' {s["mean"] * 100:.0f}% AI  │  burstiness: {s["std"]:.2f}\n')
     t.append("  " + "─" * 42 + "\n", style="dim")
     t.append(f'  {"ensemble":<15s}', style="bold cyan")
-    t.append(f' {ensemble_stats["mean"] * 100:.0f}% AI  │  burstiness: {ensemble_stats["std"]:.2f}\n')
+    t.append(
+        f' {ensemble_stats["mean"] * 100:.0f}% AI  │  '
+        f'burstiness: {ensemble_stats["std"]:.2f}\n'
+    )
     t.append("\n")
     # Agreement analysis
     if len(detector_results) >= 2:
@@ -39,8 +42,11 @@ def _comparison_table(detector_results: list[dict], ensemble_stats: dict) -> Tex
                 agree_low += 1
             else:
                 disagree += 1
-        t.append(f"  Agreement: {agree_high} flagged by all, {agree_low} cleared by all, "
-                 f"{disagree} disagree\n", style="dim")
+        t.append(
+            f"  Agreement: {agree_high} flagged by all, "
+            f"{agree_low} cleared by all, {disagree} disagree\n",
+            style="dim",
+        )
     return t
 
 
@@ -49,9 +55,14 @@ def output_json(sentences: list[str], probs: list[float], markers: list[list[str
                 detector_results: list[dict] | None = None,
                 llm_advice: str | None = None) -> None:
     """Print machine-readable JSON."""
-    tips, focus, all_marks = generate_advice(sentences, probs, markers, stats, threshold)
+    tips, focus, all_marks = generate_advice(
+        sentences, probs, markers, stats, threshold
+    )
     top = [{"word": w, "count": c} for w, c in Counter(all_marks).most_common(5)]
-    focus_data = [{"text": s, "score": round(p, 4), "markers": m} for s, p, m in focus]
+    focus_data = [
+        {"text": s, "score": round(p, 4), "markers": m}
+        for s, p, m in focus
+    ]
 
     result = {
         "model": model_name,
@@ -70,9 +81,12 @@ def output_json(sentences: list[str], probs: list[float], markers: list[list[str
             "focus": focus_data,
             **({"text": llm_advice} if llm_advice else {}),
         },
-        "disclaimer": "This tool detects statistical similarity to modern AI-generated text. "
-                       "It is NOT definitive. Known false positives: formal prose, academic writing, "
-                       "legal text, non-native English, and pre-1900 literature. Use as one signal among many.",
+        "disclaimer": (
+            "This tool detects statistical similarity to modern AI-generated text. "
+            "It is NOT definitive. Known false positives: formal prose, "
+            "academic writing, legal text, non-native English, and pre-1900 "
+            "literature. Use as one signal among many."
+        ),
     }
 
     if detector_results:
@@ -120,14 +134,23 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
                 body.append(f'{r["name"]}: {p * 100:.0f}% ', style="dim")
         body.append("\n")
         if marks and prob >= threshold:
-            body.append(f'   \u2514\u2500 markers: {", ".join(f"{m!r}" for m in marks)}\n', style="dim red")
+            body.append(
+                f'   \u2514\u2500 markers: {", ".join(f"{m!r}" for m in marks)}\n',
+                style="dim red",
+            )
 
     # Stats summary
     body.append("\n")
     body.append(" " + "\u2500" * 44 + "\n", style="dim")
-    overall_color = "green" if stats["mean"] < 0.3 else ("yellow" if stats["mean"] < 0.7 else "red")
+    overall_color = (
+        "green" if stats["mean"] < 0.3
+        else ("yellow" if stats["mean"] < 0.7 else "red")
+    )
     body.append("  Overall:    ", style="bold")
-    body.append(f'{stats["mean"] * 100:.0f}% AI probability\n', style=f"bold {overall_color}")
+    body.append(
+        f'{stats["mean"] * 100:.0f}% AI probability\n',
+        style=f"bold {overall_color}",
+    )
     body.append("  Burstiness: ", style="bold")
     body.append(f'{stats["std"]:.2f} (std dev)\n')
     body.append("  Sentences:  ", style="bold")
@@ -153,7 +176,10 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
             body.append(f" {line}\n")
     else:
         for tip in tips:
-            body.append(f" {tip}\n", style="yellow" if tip.startswith("\u26a0") else "green")
+            body.append(
+                f" {tip}\n",
+                style="yellow" if tip.startswith("\u26a0") else "green",
+            )
 
     if focus:
         body.append("\n")
@@ -168,7 +194,12 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
     body.append(" " + "\u2500" * 44 + "\n", style="dim")
     body.append(" \u26a0  Disclaimer\n", style="bold yellow")
     body.append(" Detects similarity to modern AI text, NOT authorship.\n", style="dim")
-    body.append(" Known false positives: formal prose, academic writing,\n", style="dim")
+    body.append(
+        " Known false positives: formal prose, academic writing,\n",
+        style="dim",
+    )
     body.append(" legal text, non-native English, pre-1900 literature.\n", style="dim")
     body.append(" Use as one signal among many.\n", style="dim")
-    console.print(Panel(body, title="[bold]humanify[/bold]", border_style="blue", expand=False))
+    console.print(
+        Panel(body, title="[bold]humanify[/bold]", border_style="blue", expand=False)
+    )
