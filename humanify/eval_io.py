@@ -255,6 +255,7 @@ def _sanitize_nan(obj: object) -> object:
 
 
 def json_dumps_record(record: dict) -> str:
-    """Serialize *record* to a stable, deterministic JSON string with NaN/Inf as null."""
+    """Serialize *record* to a stable, deterministic JSON string
+    with NaN/Inf as null."""
     sanitized = _sanitize_nan(record)
     return json.dumps(sanitized, sort_keys=True, ensure_ascii=False)

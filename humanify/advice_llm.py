@@ -6,11 +6,18 @@ based on the statistical analysis results from the detection pipeline.
 
 from collections import Counter
 import re
+from typing import Any
 
 import torch
 
 
-def _build_prompt(sentences, probs, markers, stats, threshold) -> str:
+def _build_prompt(
+    sentences: list[str],
+    probs: list[float],
+    markers: list[list[str]],
+    stats: dict[str, float],
+    threshold: float,
+) -> str:
     """Format analysis results into a structured prompt for the LLM."""
     from .analysis import _sentence_openers
 
@@ -21,7 +28,10 @@ def _build_prompt(sentences, probs, markers, stats, threshold) -> str:
 
     # Collect markers with counts
     all_marks = [m for marks in markers for m in marks]
-    mark_str = ", ".join(f"{w} ({c}x)" for w, c in Counter(all_marks).most_common(5)) or "none"
+    mark_str = (
+        ", ".join(f"{w} ({c}x)" for w, c in Counter(all_marks).most_common(5))
+        or "none"
+    )
 
     # Repetitive openers
     openers = _sentence_openers(sentences)
@@ -39,7 +49,10 @@ def _build_prompt(sentences, probs, markers, stats, threshold) -> str:
             top_lines.append(f'  "{short}" ({probs[idx] * 100:.0f}% AI)')
     top_str = "\n".join(top_lines) or "none above threshold"
 
-    return f"""You are a writing coach. Based on this statistical analysis of text, give 3-5 specific, actionable tips to make the writing sound more natural. Focus on structural changes, not word-by-word swaps.
+    return (
+        f"""You are a writing coach. Based on this statistical analysis of text, """
+        f"""give 3-5 specific, actionable tips to make the writing sound more natural. """
+        f"""Focus on structural changes, not word-by-word swaps.
 
 Analysis results:
 - Overall AI probability: {overall:.0f}%
@@ -54,9 +67,10 @@ Highest AI-scored sentences:
 {top_str}
 
 Give concise, direct advice. Be specific to this text."""
+    )
 
 
-def _format_generation_prompt(tokenizer, prompt: str) -> str:
+def _format_generation_prompt(tokenizer: Any, prompt: str) -> str:
     """Apply a chat template when available, disabling model reasoning if supported."""
     apply_chat_template = getattr(tokenizer, "apply_chat_template", None)
     if apply_chat_template is None:
@@ -78,9 +92,13 @@ def _format_generation_prompt(tokenizer, prompt: str) -> str:
         )
 
 
-def _pad_token_id(tokenizer) -> int:
+def _pad_token_id(tokenizer: Any) -> int:
     """Return pad token id without treating token id 0 as missing."""
-    return tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
+    return (
+        tokenizer.pad_token_id
+        if tokenizer.pad_token_id is not None
+        else tokenizer.eos_token_id
+    )
 
 
 def _strip_think_blocks(text: str) -> str:
@@ -93,7 +111,16 @@ def _strip_think_blocks(text: str) -> str:
     )
 
 
-def generate_llm_advice(model, tokenizer, device, sentences, probs, markers, stats, threshold) -> str:
+def generate_llm_advice(
+    model: Any,
+    tokenizer: Any,
+    device: str,
+    sentences: list[str],
+    probs: list[float],
+    markers: list[list[str]],
+    stats: dict[str, float],
+    threshold: float,
+) -> str:
     """Generate writing advice using a causal LM.
 
     Args:

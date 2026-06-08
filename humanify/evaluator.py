@@ -1,4 +1,5 @@
-"""Batch eval runner: loads samples, scores with detectors + writing metrics, outputs JSONL."""
+"""Batch eval runner: loads samples, scores with detectors + writing
+metrics, outputs JSONL."""
 from __future__ import annotations
 
 from typing import Any
@@ -74,13 +75,19 @@ def run_eval(
     for sample in samples:
         try:
             result = _score_text(
-                sample.candidate, loaded_detectors=loaded_detectors, batch_size=batch_size
+                sample.candidate,
+                loaded_detectors=loaded_detectors,
+                batch_size=batch_size,
             )
         except Exception as exc:
             error_stream.write(f"Error scoring sample {sample.id}: {exc}\n")
             return 1
 
-        metrics = compute_writing_metrics(sample.prompt, sample.candidate, sample.reference)
+        metrics = compute_writing_metrics(
+            sample.prompt,
+            sample.candidate,
+            sample.reference,
+        )
         components = component_scores(metrics, detector_stats=result["stats"])
         composite = composite_score(components)
 
