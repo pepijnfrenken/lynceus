@@ -1,0 +1,3 @@
+{"id": "d1", "prompt": "First", "candidate": "First text."}
+{"id": "d2", "prompt": "Second", "candidate": "Second text."}
+{"id": "d1", "prompt": "Duplicate", "candidate": "Duplicate text."}

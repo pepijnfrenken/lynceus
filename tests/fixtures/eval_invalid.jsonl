@@ -1,0 +1,3 @@
+{"id": "i1", "prompt": "Test", "candidate": "Valid"}
+not valid json
+{"id": "i3", "prompt": "", "candidate": "empty prompt"}
