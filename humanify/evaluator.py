@@ -7,7 +7,6 @@ import sys
 from .cli import _load_detectors, _score_text
 from .eval_io import (
     DuplicateIdError,
-    EvalSample,
     load_eval_samples,
     load_preference_pairs,
     parse_eval_samples_jsonl,
