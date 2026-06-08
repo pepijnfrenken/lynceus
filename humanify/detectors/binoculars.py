@@ -4,7 +4,10 @@ import math
 import os
 
 import torch
-from .base import Detector
+from .base import Detector, _ensure_pad_token
+MAX_LENGTH = 512
+PPL_THRESHOLD = 1e-8
+SIGMOID_SCALE = 10.0
 
 
 def _login_hf():
@@ -43,10 +46,7 @@ class BinocularsDetector(Detector):
         dtype = torch.float16 if fp16 else None
 
         self._observer_tokenizer = AutoTokenizer.from_pretrained(self._observer_id)
-        if self._observer_tokenizer.pad_token_id is None:
-            self._observer_tokenizer.pad_token_id = (
-                self._observer_tokenizer.eos_token_id
-            )
+        _ensure_pad_token(self._observer_tokenizer)
         self._observer_model = AutoModelForCausalLM.from_pretrained(
             self._observer_id, dtype=dtype
         )
@@ -69,7 +69,7 @@ class BinocularsDetector(Detector):
         scores = []
         for text in texts:
             enc = self._observer_tokenizer(
-                text, return_tensors="pt", truncation=True, max_length=512,
+                text, return_tensors="pt", truncation=True, max_length=MAX_LENGTH,
                 return_token_type_ids=False,
             ).to(self._device)
             labels = enc.input_ids[:, 1:]
@@ -82,7 +82,7 @@ class BinocularsDetector(Detector):
                     perf_logits = obs_logits
                 else:
                     perf_enc = self._performer_tokenizer(
-                        text, return_tensors="pt", truncation=True, max_length=512,
+                        text, return_tensors="pt", truncation=True, max_length=MAX_LENGTH,
                         return_token_type_ids=False,
                     ).to(self._device)
                     perf_logits = self._performer_model(**perf_enc).logits[:, :-1]
@@ -98,7 +98,7 @@ class BinocularsDetector(Detector):
             cross_entropy = -(perf_probs * obs_lprobs_cross).sum(-1)
             log_cross_ppl = cross_entropy.mean()
 
-            if log_cross_ppl.abs() < 1e-8:
+            if log_cross_ppl.abs() < PPL_THRESHOLD:
                 scores.append(0.5)
                 continue
 
@@ -106,7 +106,7 @@ class BinocularsDetector(Detector):
 
             # Normalize: binoc ≈ 1.0 for AI, > 1.0 for human
             # Sigmoid centered at 1.0, scaled
-            ai_prob = 1.0 / (1.0 + math.exp((binoc - 1.0) * 10.0))
+            ai_prob = 1.0 / (1.0 + math.exp((binoc - 1.0) * SIGMOID_SCALE))
             scores.append(ai_prob)
 
         return scores

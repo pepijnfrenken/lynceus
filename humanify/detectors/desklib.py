@@ -2,6 +2,7 @@
 
 import torch
 from .base import Detector
+MAX_LENGTH = 768
 
 
 class DesklibDetector(Detector):
@@ -61,7 +62,7 @@ class DesklibDetector(Detector):
             batch = texts[i : i + batch_size]
             enc = self._tokenizer(
                 batch, padding=True, truncation=True,
-                max_length=768, return_tensors="pt"
+                max_length=MAX_LENGTH, return_tensors="pt"
             )
             with torch.no_grad():
                 logits = self._model(

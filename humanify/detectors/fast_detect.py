@@ -5,6 +5,7 @@ import os
 
 import torch
 from .base import Detector
+MAX_LENGTH = 512
 
 
 def _login_hf():
@@ -46,7 +47,7 @@ class FastDetectDetector(Detector):
         for text in texts:
             enc = self._tokenizer(
                 text, return_tensors="pt", truncation=True,
-                max_length=512, return_token_type_ids=False,
+                max_length=MAX_LENGTH, return_token_type_ids=False,
             ).to(self._device)
             labels = enc.input_ids[:, 1:]
             with torch.no_grad():

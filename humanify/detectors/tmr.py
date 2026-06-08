@@ -2,6 +2,7 @@
 
 import torch
 from .base import Detector
+MAX_LENGTH = 512
 
 
 class TMRDetector(Detector):
@@ -24,7 +25,7 @@ class TMRDetector(Detector):
 
     def score(self, texts: list[str], batch_size: int = 32) -> list[float]:
         results = self._pipe(
-            texts, batch_size=batch_size, truncation=True, max_length=512
+            texts, batch_size=batch_size, truncation=True, max_length=MAX_LENGTH
         )
         probs = []
         for row in results:
