@@ -96,7 +96,7 @@ def spearman(xs: list[float], ys: list[float]) -> float | None:
 def component_scores(
     metrics: dict,
     detector_stats: dict | None = None,
-) -> dict:
+) -> dict[str, float | None]:
     """Compute component scores from writing metrics and optional detector stats.
 
     Parameters
@@ -174,7 +174,7 @@ def component_scores(
 # ---------------------------------------------------------------------------
 
 
-def composite_score(components: dict) -> dict:
+def composite_score(components: dict) -> dict[str, Any]:
     """Compute final composite score from component scores.
 
     Formula: ``0.40*preference_rubric + 0.25*readability_style +
@@ -241,7 +241,7 @@ def _flatten_metrics(
     return result
 
 
-def aggregate_samples(sample_records: list[dict]) -> dict:
+def aggregate_samples(sample_records: list[dict]) -> dict[str, Any]:
     """Compute aggregate statistics across sample records.
 
     For each metric key in the first valid record's metrics (both

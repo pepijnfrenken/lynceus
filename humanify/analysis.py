@@ -141,7 +141,13 @@ def _sentence_openers(sentences: list[str]) -> list[tuple[str, int]]:
     return Counter(openers).most_common(5)
 
 
-def generate_advice(sentences, probs, markers, stats, threshold):
+def generate_advice(
+    sentences: list[str],
+    probs: list[float],
+    markers: list[list[str]],
+    stats: dict[str, float],
+    threshold: float,
+) -> tuple[list[str], list[tuple[str, float, list[str]]], list[str]]:
     """Generate structural writing advice from analysis results.
 
     Returns (tips, focus_sentences, all_markers).

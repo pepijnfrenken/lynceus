@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass
-from typing import Literal
+from typing import Callable, Literal
 
 SCHEMA_VERSION = 1
 
@@ -80,8 +80,7 @@ def _parse_jsonl_lines(
     *,
     required_fields: list[str],
     optional_fields: list[str] = [],
-    extra_validator: None
-    | (callable) = None,
+    extra_validator: Callable[[dict, int, str], None] | None = None,
 ) -> list[dict]:
     """Parse *text* as JSONL and return a list of validated dicts.
 
