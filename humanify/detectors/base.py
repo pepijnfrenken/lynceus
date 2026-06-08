@@ -3,6 +3,12 @@
 from abc import ABC, abstractmethod
 
 
+def _ensure_pad_token(tokenizer) -> None:
+    """Set tokenizer.pad_token_id to eos_token_id if unset."""
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+
+
 class Detector(ABC):
     """Pluggable AI text detector.
 

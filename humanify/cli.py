@@ -9,6 +9,7 @@ import torch
 
 from .analysis import ScoringUnit, find_markers, prepare_scoring_units, read_input
 from .detectors import DETECTORS, get_detector
+from .detectors.base import _ensure_pad_token
 from .output import output_json, output_rich
 import os
 
@@ -259,8 +260,7 @@ def _main_single(argv: list[str] | None = None) -> int:
             from .detectors.fast_detect import _login_hf
             _login_hf()
             _adv_tok = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-0.8B-Base")
-            if _adv_tok.pad_token_id is None:
-                _adv_tok.pad_token_id = _adv_tok.eos_token_id
+            _ensure_pad_token(_adv_tok)
             dtype = torch.float16 if use_cuda else None
             _adv_model = AutoModelForCausalLM.from_pretrained(
                 "Qwen/Qwen3.5-0.8B-Base",

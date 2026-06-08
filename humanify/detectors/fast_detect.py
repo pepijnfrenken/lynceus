@@ -4,7 +4,7 @@ import math
 import os
 
 import torch
-from .base import Detector
+from .base import Detector, _ensure_pad_token
 MAX_LENGTH = 512
 
 
@@ -34,8 +34,7 @@ class FastDetectDetector(Detector):
 
         _login_hf()
         self._tokenizer = AutoTokenizer.from_pretrained(self._model_id)
-        if self._tokenizer.pad_token_id is None:
-            self._tokenizer.pad_token_id = self._tokenizer.eos_token_id
+        _ensure_pad_token(self._tokenizer)
         dtype = torch.float16 if fp16 else None
         self._model = AutoModelForCausalLM.from_pretrained(self._model_id, dtype=dtype)
         self._device = device

@@ -53,10 +53,7 @@ class BinocularsDetector(Detector):
         self._observer_model.to(device).eval()
 
         self._performer_tokenizer = AutoTokenizer.from_pretrained(self._performer_id)
-        if self._performer_tokenizer.pad_token_id is None:
-            self._performer_tokenizer.pad_token_id = (
-                self._performer_tokenizer.eos_token_id
-            )
+        _ensure_pad_token(self._performer_tokenizer)
         self._performer_model = AutoModelForCausalLM.from_pretrained(
             self._performer_id, dtype=dtype
         )
