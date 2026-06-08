@@ -60,7 +60,8 @@ class DesklibDetector(Detector):
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
             enc = self._tokenizer(
-                batch, padding=True, truncation=True, max_length=768, return_tensors="pt"
+                batch, padding=True, truncation=True,
+                max_length=768, return_tensors="pt"
             )
             with torch.no_grad():
                 logits = self._model(

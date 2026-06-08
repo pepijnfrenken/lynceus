@@ -1,0 +1,29 @@
+test_clamp_at_edge (tests.test_writing_metrics.ClampTest.test_clamp_at_edge) ... ok
+test_clamp_lower (tests.test_writing_metrics.ClampTest.test_clamp_lower) ... ok
+test_clamp_middle (tests.test_writing_metrics.ClampTest.test_clamp_middle) ... ok
+test_clamp_upper (tests.test_writing_metrics.ClampTest.test_clamp_upper) ... ok
+test_all_normalized_values_in_range_or_none (tests.test_writing_metrics.WritingMetricsTest.test_all_normalized_values_in_range_or_none)
+Guard: every normalized metric across several texts is in [0,1]. ... ok
+test_empty_candidate (tests.test_writing_metrics.WritingMetricsTest.test_empty_candidate)
+An empty candidate should be handled without division-by-zero. ... ok
+test_missing_reference (tests.test_writing_metrics.WritingMetricsTest.test_missing_reference)
+Without a reference, reference_overlap should be None and coherence ... ok
+test_normal_varied_text_all_normalized_in_range (tests.test_writing_metrics.WritingMetricsTest.test_normal_varied_text_all_normalized_in_range)
+A normally varied piece of writing should have all metrics in [0,1]. ... ok
+test_repeated_sentences_lower_repetition_score (tests.test_writing_metrics.WritingMetricsTest.test_repeated_sentences_lower_repetition_score)
+Repeating the same text should produce a lower repetition.normalized. ... ok
+test_repetition_detects_ngram_overlap (tests.test_writing_metrics.WritingMetricsTest.test_repetition_detects_ngram_overlap)
+Text with repeated bigrams should have lower repetition than varied. ... ok
+test_short_one_sentence_candidate (tests.test_writing_metrics.WritingMetricsTest.test_short_one_sentence_candidate)
+A single short sentence should get sentence_variety.normalized = 0.5. ... ok
+test_unicode_non_ascii_punctuation (tests.test_writing_metrics.WritingMetricsTest.test_unicode_non_ascii_punctuation)
+Unicode non-ASCII punctuation does not cause errors. ... ok
+test_very_short_candidate_falls_back_to_one_sentence (tests.test_writing_metrics.WritingMetricsTest.test_very_short_candidate_falls_back_to_one_sentence)
+A short candidate rejected by split_sentences becomes one sentence. ... ok
+test_with_reference_overlap (tests.test_writing_metrics.WritingMetricsTest.test_with_reference_overlap)
+With a reference, reference_overlap should be a float in [0,1]. ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.004s
+
+OK

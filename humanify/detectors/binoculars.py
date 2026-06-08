@@ -133,7 +133,8 @@ class BinocularsDetector(Detector):
             self._performer_id = parts[1]
         else:
             raise ValueError(
-                f"binoculars --model-id expects 'model' or 'observer,performer', got: {model_id}"
+                f"binoculars --model-id expects 'model' or 'observer,performer', "
+                f"got: {model_id}"
             )
 
     def get_causal_lm(self) -> tuple | None:

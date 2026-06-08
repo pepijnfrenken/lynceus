@@ -50,9 +50,9 @@ def _build_prompt(
     top_str = "\n".join(top_lines) or "none above threshold"
 
     return (
-        f"""You are a writing coach. Based on this statistical analysis of text, """
-        f"""give 3-5 specific, actionable tips to make the writing sound more natural. """
-        f"""Focus on structural changes, not word-by-word swaps.
+        f"""You are a writing coach. Based on this statistical analysis of text,"""
+        f""" give 3-5 specific, actionable tips to make the writing sound more"""
+        f""" natural. Focus on structural changes, not word-by-word swaps.
 
 Analysis results:
 - Overall AI probability: {overall:.0f}%

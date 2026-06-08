@@ -177,8 +177,9 @@ def _main_single(argv: list[str] | None = None) -> int:
                         help="Output machine-readable JSON")
     parser.add_argument("--model", "-m", type=str, default="tmr",
                         help=(
-                            f"Detection method (default: tmr). Comma-separate for ensemble: "
-                            f"tmr,fast-detect. Available: {', '.join(DETECTORS)}"
+                            f"Detection method (default: tmr). "
+                            f"Comma-separate for ensemble: tmr,fast-detect. "
+                            f"Available: {', '.join(DETECTORS)}"
                         ))
     parser.add_argument("--model-id", type=str, default=None,
                         help=(
@@ -323,7 +324,8 @@ def _main_eval(argv: list[str]) -> None:
                         help="Optional path to preference label JSONL")
     parser.add_argument("--model", "-m", type=str, default="tmr",
                         help=(
-                            f"Detection method (default: tmr). Comma-separate for ensemble. "
+                            f"Detection method (default: tmr). "
+                            f"Comma-separate for ensemble. "
                             f"Available: {', '.join(DETECTORS)}"
                         ))
     parser.add_argument("--model-id", type=str, default=None,
