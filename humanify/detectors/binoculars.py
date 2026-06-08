@@ -44,14 +44,22 @@ class BinocularsDetector(Detector):
 
         self._observer_tokenizer = AutoTokenizer.from_pretrained(self._observer_id)
         if self._observer_tokenizer.pad_token_id is None:
-            self._observer_tokenizer.pad_token_id = self._observer_tokenizer.eos_token_id
-        self._observer_model = AutoModelForCausalLM.from_pretrained(self._observer_id, dtype=dtype)
+            self._observer_tokenizer.pad_token_id = (
+                self._observer_tokenizer.eos_token_id
+            )
+        self._observer_model = AutoModelForCausalLM.from_pretrained(
+            self._observer_id, dtype=dtype
+        )
         self._observer_model.to(device).eval()
 
         self._performer_tokenizer = AutoTokenizer.from_pretrained(self._performer_id)
         if self._performer_tokenizer.pad_token_id is None:
-            self._performer_tokenizer.pad_token_id = self._performer_tokenizer.eos_token_id
-        self._performer_model = AutoModelForCausalLM.from_pretrained(self._performer_id, dtype=dtype)
+            self._performer_tokenizer.pad_token_id = (
+                self._performer_tokenizer.eos_token_id
+            )
+        self._performer_model = AutoModelForCausalLM.from_pretrained(
+            self._performer_id, dtype=dtype
+        )
         self._performer_model.to(device).eval()
 
         self._device = device
@@ -124,7 +132,9 @@ class BinocularsDetector(Detector):
             self._observer_id = parts[0]
             self._performer_id = parts[1]
         else:
-            raise ValueError(f"binoculars --model-id expects 'model' or 'observer,performer', got: {model_id}")
+            raise ValueError(
+                f"binoculars --model-id expects 'model' or 'observer,performer', got: {model_id}"
+            )
 
     def get_causal_lm(self) -> tuple | None:
         """Return loaded observer model for reuse by advice generator."""

@@ -44,8 +44,10 @@ class FastDetectDetector(Detector):
         """Score text segments using Fast-DetectGPT statistic."""
         scores = []
         for text in texts:
-            enc = self._tokenizer(text, return_tensors="pt", truncation=True,
-                                  max_length=512, return_token_type_ids=False).to(self._device)
+            enc = self._tokenizer(
+                text, return_tensors="pt", truncation=True,
+                max_length=512, return_token_type_ids=False,
+            ).to(self._device)
             labels = enc.input_ids[:, 1:]
             with torch.no_grad():
                 logits = self._model(**enc).logits[:, :-1]
@@ -57,7 +59,10 @@ class FastDetectDetector(Detector):
             mean_ref = (probs * lprobs).sum(dim=-1)
             var_ref = (probs * lprobs.square()).sum(dim=-1) - mean_ref.square()
 
-            stat = (log_likelihood.sum(dim=-1) - mean_ref.sum(dim=-1)) / var_ref.sum(dim=-1).sqrt()
+            stat = (
+                (log_likelihood.sum(dim=-1) - mean_ref.sum(dim=-1))
+                / var_ref.sum(dim=-1).sqrt()
+            )
             raw = stat.item()
 
             # Normalize to 0-1 via sigmoid

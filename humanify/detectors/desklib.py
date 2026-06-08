@@ -34,12 +34,20 @@ class DesklibDetector(Detector):
 
         self._tokenizer = AutoTokenizer.from_pretrained(self._model_id)
         state = load_file(hf_hub_download(self._model_id, "model.safetensors"))
-        base_state = {k.removeprefix("model."): v for k, v in state.items() if not k.startswith("classifier")}
+        base_state = {
+            k.removeprefix("model."): v
+            for k, v in state.items()
+            if not k.startswith("classifier")
+        }
         config = AutoConfig.from_pretrained(self._model_id)
         base = AutoModel.from_config(config)
         base.load_state_dict(base_state, strict=True)
         model = DesklibHead(base)
-        cls_w = {k.removeprefix("classifier."): v for k, v in state.items() if k.startswith("classifier.")}
+        cls_w = {
+            k.removeprefix("classifier."): v
+            for k, v in state.items()
+            if k.startswith("classifier.")
+        }
         if cls_w:
             model.classifier.load_state_dict(cls_w)
         if fp16:
@@ -51,7 +59,9 @@ class DesklibDetector(Detector):
         probs = []
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
-            enc = self._tokenizer(batch, padding=True, truncation=True, max_length=768, return_tensors="pt")
+            enc = self._tokenizer(
+                batch, padding=True, truncation=True, max_length=768, return_tensors="pt"
+            )
             with torch.no_grad():
                 logits = self._model(
                     input_ids=enc["input_ids"].to(self._device),
