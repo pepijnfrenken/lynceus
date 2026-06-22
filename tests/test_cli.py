@@ -84,3 +84,36 @@ class CliScoreTextTest(unittest.TestCase):
                 ret = _main_single(["--file", "/dev/null"])
         self.assertEqual(ret, 1)
         self.assertIn("no input text provided", stderr.getvalue())
+
+    def test_main_single_json_includes_writing_quality(self):
+        raw = "The cat sat on the mat. It was very happy."
+        with patch("humanify.cli.read_input", return_value=raw):
+            with patch("humanify.cli._load_detectors", return_value=_FAKE_DETECTORS):
+                with patch("sys.stdout", new=io.StringIO()) as stdout:
+                    with patch("os._exit"):
+                        _main_single(["--json"])
+        output = stdout.getvalue()
+        import json
+        result = json.loads(output)
+        self.assertIn("writing_quality", result)
+        self.assertIn("metrics", result["writing_quality"])
+        self.assertIn("advice", result["writing_quality"])
+
+    def test_main_single_academic_style_includes_paragraph_analysis(self):
+        raw = "Gamification can improve learning. It adds game elements.\n\nHowever, poorly designed gamification can cause anxiety.\n\nIn conclusion, gamification helps when designed well."
+        with patch("humanify.cli.read_input", return_value=raw):
+            with patch("humanify.cli._load_detectors", return_value=_FAKE_DETECTORS):
+                with patch("sys.stdout", new=io.StringIO()) as stdout:
+                    with patch("os._exit"):
+                        _main_single(["--json", "--style", "academic"])
+        output = stdout.getvalue()
+        import json
+        result = json.loads(output)
+        self.assertIn("writing_quality", result)
+        wq = result["writing_quality"]
+        self.assertIn("paragraph_analysis", wq)
+        self.assertIn("sentence_analysis", wq)
+        self.assertIn("top_worst", wq)
+        # Academic style should include paragraph analysis
+        pa = wq["paragraph_analysis"]
+        self.assertEqual(pa["paragraph_count"], 3)

@@ -35,6 +35,22 @@ FIXTURE_METRICS = {
             "terminal_punctuation_consistency": 0.9,
             "casing_consistency": 0.85,
         },
+        "grammar_heuristics": {
+            "passive_ratio": 0.1,
+            "weak_modifier_ratio": 0.05,
+            "runon_ratio": 0.0,
+        },
+        "specificity": {
+            "vague_word_ratio": 0.05,
+            "abstract_noun_ratio": 0.12,
+            "concrete_detail_ratio": 0.4,
+        },
+        "evidence": {
+            "citation_density": 0.2,
+            "example_density": 0.1,
+            "data_density": 0.1,
+            "experience_density": 0.0,
+        },
     },
     "normalized": {
         "readability": 0.65,
@@ -43,20 +59,25 @@ FIXTURE_METRICS = {
         "repetition": 0.80,
         "coherence_rubric": 0.72,
         "style_consistency": 0.68,
+        "grammar_heuristics": 0.75,
+        "specificity": 0.60,
+        "evidence": 0.50,
     },
 }
 
 # Expected component scores for FIXTURE_METRICS
-# preference_rubric = 0.45*0.72 + 0.25*0.68 + 0.15*0.65 + 0.10*0.55 + 0.05*0.80
+# preference_rubric = 0.40*0.72 + 0.20*0.68 + 0.10*0.65 + 0.05*0.55 + 0.05*0.80 + 0.10*0.60 + 0.10*0.50
 EXPECTED_PREFERENCE_RUBRIC = (
-    0.45 * 0.72
-    + 0.25 * 0.68
-    + 0.15 * 0.65
-    + 0.10 * 0.55
+    0.40 * 0.72
+    + 0.20 * 0.68
+    + 0.10 * 0.65
+    + 0.05 * 0.55
     + 0.05 * 0.80
+    + 0.10 * 0.60
+    + 0.10 * 0.50
 )
-# readability_style = mean(0.65, 0.55, 0.68)
-EXPECTED_READABILITY_STYLE = (0.65 + 0.55 + 0.68) / 3.0
+# readability_style = mean(0.65, 0.55, 0.68, 0.75)
+EXPECTED_READABILITY_STYLE = (0.65 + 0.55 + 0.68 + 0.75) / 4.0
 # repetition_variety = mean(0.80, 0.70)
 EXPECTED_REPETITION_VARIETY = (0.80 + 0.70) / 2.0
 

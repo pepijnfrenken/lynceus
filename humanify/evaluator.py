@@ -19,6 +19,7 @@ from .eval_scoring import (
     composite_score,
     score_preference_pairs,
 )
+from .output import render_eval_summary
 from .writing_metrics import compute_writing_metrics
 
 
@@ -154,5 +155,9 @@ def run_eval(
         },
     }
     output_stream.write(json_dumps_record(summary) + "\n")
+
+    render_eval_summary(
+        sample_records, summary, model_names, correlation_result
+    )
 
     return 0

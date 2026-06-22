@@ -227,5 +227,324 @@ class WritingMetricsTest(unittest.TestCase):
                 _check_all_normalized_in_range(result, msg=f"candidate[{i}]")
 
 
+class GrammarHeuristicsTest(unittest.TestCase):
+    def test_passive_voice_detected(self):
+        prompt = "Write a sentence."
+        passive = "The ball was thrown by John. The cake was eaten by Mary."
+        active = "John threw the ball. Mary ate the cake."
+
+        passive_result = compute_writing_metrics(prompt, passive)
+        active_result = compute_writing_metrics(prompt, active)
+
+        self.assertLess(
+            passive_result["normalized"]["grammar_heuristics"],
+            active_result["normalized"]["grammar_heuristics"],
+        )
+        self.assertGreater(
+            passive_result["raw"]["grammar_heuristics"]["passive_ratio"], 0
+        )
+
+    def test_weak_modifiers_detected(self):
+        prompt = "Write a sentence."
+        weak = "It is very really quite good."
+        strong = "It excels."
+
+        weak_result = compute_writing_metrics(prompt, weak)
+        strong_result = compute_writing_metrics(prompt, strong)
+
+        self.assertLess(
+            weak_result["normalized"]["grammar_heuristics"],
+            strong_result["normalized"]["grammar_heuristics"],
+        )
+
+    def test_runon_detected(self):
+        prompt = "Write a sentence."
+        runon = (
+            "This is a very long sentence, with many clauses, and extra words, "
+            "and even more words, and it just keeps going."
+        )
+        short = "This is short. It is clear."
+
+        runon_result = compute_writing_metrics(prompt, runon)
+        short_result = compute_writing_metrics(prompt, short)
+
+        self.assertLess(
+            runon_result["normalized"]["grammar_heuristics"],
+            short_result["normalized"]["grammar_heuristics"],
+        )
+
+
+class SpecificityTest(unittest.TestCase):
+    def test_vague_words_detected(self):
+        prompt = "Write a sentence."
+        vague = "The thing was very good. The stuff was bad."
+        specific = "The engine reached 120 km/h. The brake pad failed."
+
+        vague_result = compute_writing_metrics(prompt, vague)
+        specific_result = compute_writing_metrics(prompt, specific)
+
+        self.assertLess(
+            vague_result["normalized"]["specificity"],
+            specific_result["normalized"]["specificity"],
+        )
+
+    def test_concrete_details_detected(self):
+        prompt = "Write a sentence."
+        concrete = "In 2024, Paris saw 38 million visitors."
+        abstract = "Tourism increased significantly in the capital."
+
+        concrete_result = compute_writing_metrics(prompt, concrete)
+        abstract_result = compute_writing_metrics(prompt, abstract)
+
+        self.assertGreater(
+            concrete_result["raw"]["specificity"]["concrete_detail_ratio"],
+            abstract_result["raw"]["specificity"]["concrete_detail_ratio"],
+        )
+
+    def test_abstract_nouns_detected(self):
+        prompt = "Write a sentence."
+        abstract = "The realization of the transformation required dedication."
+        concrete = "The builder hammered nails into the wooden frame."
+
+        abstract_result = compute_writing_metrics(prompt, abstract)
+        concrete_result = compute_writing_metrics(prompt, concrete)
+
+        self.assertGreater(
+            abstract_result["raw"]["specificity"]["abstract_noun_ratio"],
+            concrete_result["raw"]["specificity"]["abstract_noun_ratio"],
+        )
+
+
+class EvidenceTest(unittest.TestCase):
+    def test_citations_detected(self):
+        prompt = "Write a sentence."
+        cited = "Smith (2019) found that the method works."
+        uncited = "The method works well."
+
+        cited_result = compute_writing_metrics(prompt, cited)
+        uncited_result = compute_writing_metrics(prompt, uncited)
+
+        self.assertGreater(
+            cited_result["raw"]["evidence"]["citation_density"],
+            uncited_result["raw"]["evidence"]["citation_density"],
+        )
+
+    def test_examples_detected(self):
+        prompt = "Write a sentence."
+        example = "For example, the bird flew south."
+        no_example = "The bird flew south."
+
+        example_result = compute_writing_metrics(prompt, example)
+        no_example_result = compute_writing_metrics(prompt, no_example)
+
+        self.assertGreater(
+            example_result["raw"]["evidence"]["example_density"],
+            no_example_result["raw"]["evidence"]["example_density"],
+        )
+
+    def test_experience_detected(self):
+        prompt = "Write a sentence."
+        experience = "In my experience, the process took three days."
+        no_experience = "The process took three days."
+
+        exp_result = compute_writing_metrics(prompt, experience)
+        no_exp_result = compute_writing_metrics(prompt, no_experience)
+
+        self.assertGreater(
+            exp_result["raw"]["evidence"]["experience_density"],
+            no_exp_result["raw"]["evidence"]["experience_density"],
+        )
+
+    def test_all_metrics_present_in_result(self):
+        prompt = "Write a sentence."
+        candidate = "The cat sat on the mat. It was very happy."
+        result = compute_writing_metrics(prompt, candidate)
+
+        self.assertIn("grammar_heuristics", result["raw"])
+        self.assertIn("grammar_heuristics", result["normalized"])
+        self.assertIn("specificity", result["raw"])
+        self.assertIn("specificity", result["normalized"])
+        self.assertIn("evidence", result["raw"])
+        self.assertIn("evidence", result["normalized"])
+
+
+class SentenceAnalysisTest(unittest.TestCase):
+    def test_passive_flag_detected(self):
+        from humanify.writing_metrics import analyze_sentences
+        sentences = ["The ball was eaten by John.", "John threw the ball."]
+        result = analyze_sentences(sentences)
+        self.assertIn("passive_voice", result[0]["flags"])
+        self.assertNotIn("passive_voice", result[1]["flags"])
+
+    def test_weak_modifiers_flag_detected(self):
+        from humanify.writing_metrics import analyze_sentences
+        sentences = ["It is very really quite good."]
+        result = analyze_sentences(sentences)
+        flags = result[0]["flags"]
+        self.assertTrue(any(f.startswith("weak_modifiers") for f in flags))
+
+    def test_runon_flag_detected(self):
+        from humanify.writing_metrics import analyze_sentences
+        sentences = [
+            "This is a very long sentence, with many clauses, and extra words, and even more words, and it just keeps going and going and going forever."
+        ]
+        result = analyze_sentences(sentences)
+        self.assertIn("runon", result[0]["flags"])
+
+    def test_no_evidence_flag(self):
+        from humanify.writing_metrics import analyze_sentences
+        sentences = ["The cat sat on the mat."]
+        result = analyze_sentences(sentences)
+        self.assertIn("no_evidence", result[0]["flags"])
+
+    def test_citation_evidence_flag(self):
+        from humanify.writing_metrics import analyze_sentences
+        sentences = ["Smith (2019) found that the method works."]
+        result = analyze_sentences(sentences)
+        self.assertIn("citation", result[0]["flags"])
+        self.assertNotIn("no_evidence", result[0]["flags"])
+
+
+class TopWorstSentencesTest(unittest.TestCase):
+    def test_returns_worst_sentences(self):
+        from humanify.writing_metrics import get_top_worst_sentences
+        sentences = [
+            "The ball was thrown by John very quickly.",
+            "John threw the ball.",
+            "It was good.",
+        ]
+        worst = get_top_worst_sentences(sentences, "grammar", top_n=2)
+        self.assertEqual(len(worst), 2)
+        # The passive sentence should be the worst
+        self.assertIn("thrown", worst[0][0])
+
+    def test_empty_list(self):
+        from humanify.writing_metrics import get_top_worst_sentences
+        self.assertEqual(get_top_worst_sentences([], "grammar"), [])
+
+
+class ParagraphAnalysisTest(unittest.TestCase):
+    def test_split_paragraphs(self):
+        from humanify.writing_metrics import split_paragraphs
+        text = "The first sentence is here. The second sentence is there.\n\nThe third sentence is here. The fourth sentence is there."
+        paragraphs = split_paragraphs(text)
+        self.assertEqual(len(paragraphs), 2)
+        self.assertEqual(len(paragraphs[0]), 2)
+        self.assertEqual(len(paragraphs[1]), 2)
+
+    def test_analyze_paragraphs_structure(self):
+        from humanify.writing_metrics import analyze_paragraphs
+        text = (
+            "Gamification can improve learning for students. It adds game elements to education.\n\n"
+            "However, poorly designed gamification can cause anxiety for students. "
+            "Therefore, designers must be careful with implementation.\n\n"
+            "In conclusion, gamification can help when designed well for students."
+        )
+        result = analyze_paragraphs(text)
+        self.assertEqual(result["paragraph_count"], 3)
+        self.assertGreater(result["topic_sentence_coverage"], 0.0)
+        self.assertGreater(result["paragraph_transition_coverage"], 0.0)
+        self.assertGreaterEqual(result["thesis_alignment"], 0.0)
+
+    def test_empty_text(self):
+        from humanify.writing_metrics import analyze_paragraphs
+        result = analyze_paragraphs("")
+        self.assertEqual(result["paragraph_count"], 0)
+
+    def test_compute_writing_metrics_includes_paragraph_analysis(self):
+        prompt = "Write about gamification."
+        candidate = (
+            "Gamification can improve learning for students. It adds game elements to education.\n\n"
+            "However, poorly designed gamification can cause anxiety for students.\n\n"
+            "In conclusion, gamification helps when designed well for students."
+        )
+        result = compute_writing_metrics(prompt, candidate)
+        self.assertIn("sentence_analysis", result)
+        self.assertIn("paragraph_analysis", result)
+        self.assertIsInstance(result["sentence_analysis"], list)
+        self.assertIsInstance(result["paragraph_analysis"], dict)
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class SynthesisDetectionTest(unittest.TestCase):
+    def test_synthesis_detected_as_evidence(self):
+        from humanify.writing_metrics import _sentence_has_synthesis, _sentence_has_evidence
+        sentences = [
+            "Several studies have found that gamification improves engagement.",
+            "Research generally supports the use of dashboards in education.",
+            "In contrast to prior work, our findings suggest that negative effects matter.",
+            "This is in line with Bitrián et al., 2021.",
+        ]
+        for s in sentences:
+            self.assertTrue(_sentence_has_synthesis(s), f"Expected synthesis in: {s}")
+            # When combined in analyze_sentences, synthesis prevents no_evidence flag
+
+    def test_no_synthesis_in_plain_sentences(self):
+        from humanify.writing_metrics import _sentence_has_synthesis
+        sentences = [
+            "The cat sat on the mat.",
+            "Gamification is fun.",
+            "This study investigates the topic.",
+        ]
+        for s in sentences:
+            self.assertFalse(_sentence_has_synthesis(s), f"Did not expect synthesis in: {s}")
+
+
+class SentenceQualityScoreTest(unittest.TestCase):
+    def test_clean_sentence_perfect_score(self):
+        from humanify.writing_metrics import _compute_sentence_quality_score
+        self.assertEqual(_compute_sentence_quality_score([]), 10.0)
+        self.assertEqual(_compute_sentence_quality_score(["synthesis"]), 10.0)
+
+    def test_runon_penalty(self):
+        from humanify.writing_metrics import _compute_sentence_quality_score
+        score = _compute_sentence_quality_score(["runon"])
+        self.assertEqual(score, 7.0)  # 10 - 3.0
+
+    def test_multiple_flags_penalty(self):
+        from humanify.writing_metrics import _compute_sentence_quality_score
+        score = _compute_sentence_quality_score(["passive_voice", "no_evidence"])
+        self.assertEqual(score, 6.0)  # 10 - 2.0 - 2.0
+
+    def test_counted_flags_penalty(self):
+        from humanify.writing_metrics import _compute_sentence_quality_score
+        score = _compute_sentence_quality_score(["weak_modifiers(3)"])
+        self.assertEqual(score, 7.0)  # 10 - 1.0 * 3
+
+    def test_score_never_negative(self):
+        from humanify.writing_metrics import _compute_sentence_quality_score
+        score = _compute_sentence_quality_score(["runon", "passive_voice", "no_evidence", "no_concrete_details", "weak_modifiers(5)", "vague_words(5)"])
+        self.assertEqual(score, 0.0)
+
+
+class ParagraphCleaningTest(unittest.TestCase):
+    def test_form_feed_stripped(self):
+        from humanify.writing_metrics import _clean_text_for_paragraphs
+        text = "First paragraph.\n\n\fSecond paragraph."
+        cleaned = _clean_text_for_paragraphs(text)
+        self.assertNotIn("\f", cleaned)
+        self.assertIn("First paragraph", cleaned)
+        self.assertIn("Second paragraph", cleaned)
+
+    def test_page_numbers_stripped(self):
+        from humanify.writing_metrics import _clean_text_for_paragraphs
+        text = "First paragraph with enough words here.\n\n15\n\nSecond paragraph."
+        cleaned = _clean_text_for_paragraphs(text)
+        self.assertNotIn("15", cleaned)
+
+    def test_figure_captions_stripped(self):
+        from humanify.writing_metrics import _clean_text_for_paragraphs
+        text = "First paragraph.\n\nFigure 3: LAD Overview\n\nSecond paragraph."
+        cleaned = _clean_text_for_paragraphs(text)
+        self.assertNotIn("Figure 3", cleaned)
+
+    def test_short_header_blocks_skipped(self):
+        from humanify.writing_metrics import split_paragraphs
+        text = "First paragraph with enough words here.\n\n15\n\nFigure 3: Overview\n\nSecond paragraph with multiple sentences. It continues here today."
+        paragraphs = split_paragraphs(text)
+        self.assertEqual(len(paragraphs), 2)
+        self.assertEqual(len(paragraphs[0]), 1)
+        self.assertEqual(len(paragraphs[1]), 2)

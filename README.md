@@ -128,7 +128,7 @@ uv run humanify --advice llm --file examples/mixed-writing-sample.txt
 usage: humanify [-h] [--file FILE] [--json] [--model MODEL]
                 [--model-id MODEL_ID] [--threshold THRESHOLD]
                 [--batch-size BATCH_SIZE] [--device {cpu,cuda}]
-                [--advice {stats,llm}]
+                [--advice {stats,llm}] [--prompt PROMPT]
 
 Analyze text for AI-like patterns using transformer models.
 
@@ -152,6 +152,8 @@ options:
   --advice, -a {stats,llm}
                         Advice mode: stats (rule-based) or llm (AI-generated
                         via causal LM)
+  --prompt PROMPT       Original writing prompt (improves keyword-coverage
+                        and coherence scoring)
 
 ### Evaluation subcommand
 
@@ -199,7 +201,9 @@ For sentences above `--threshold`, detected markers are shown below the sentence
 - Sentence count
 - Minimum and maximum context-aware sentence scores
 - Model or ensemble label
-- Writing advice
+- **Writing quality metrics** (grammar, specificity, evidence, readability, lexical diversity, coherence, style consistency)
+- **Writing quality advice** — concrete strengths and weaknesses based on deterministic metrics
+- Writing advice (AI-detection focused)
 - False-positive disclaimer
 
 ### JSON output
@@ -218,7 +222,11 @@ Top-level fields include:
 - `burstiness`: standard deviation of context-aware sentence probabilities
 - `stats`: mean, standard deviation, minimum, and maximum
 - `sentence_count`: number of analyzed sentences
-- `advice`: deterministic or LLM-generated advice payload
+- `advice`: deterministic or LLM-generated AI advice payload
+- `writing_quality`: deterministic quality metrics and advice
+  - `metrics`: raw and normalized scores for grammar, specificity, evidence, readability, lexical diversity, sentence variety, repetition, coherence, and style consistency
+  - `advice`: concrete tips on what works and what doesn't
+  - `llm_text`: optional LLM-generated quality coaching (when `--advice llm` is used)
 - `detectors`: per-detector scores when using an ensemble
 - `disclaimer`: usage warning
 
@@ -317,10 +325,10 @@ Each output line is a JSON object with these fields:
 - `schema_version`: always `1`
 - `type`: `"sample"`
 - `id`: the sample identifier from input
-- `metrics`: object containing `raw` and `normalized` writing metrics (readability, lexical diversity, sentence variety, repetition, coherence rubric, style consistency)
+- `metrics`: object containing `raw` and `normalized` writing metrics (readability, lexical diversity, sentence variety, repetition, coherence rubric, style consistency, grammar heuristics, specificity, evidence)
 - `component_scores`: four component scores used in the composite
-  - `preference_rubric` — weighted blend of coherence, style, readability, lexical diversity, and repetition
-  - `readability_style` — mean of readability, lexical diversity, and style consistency
+  - `preference_rubric` — weighted blend of coherence, style, readability, lexical diversity, repetition, specificity, and evidence
+  - `readability_style` — mean of readability, lexical diversity, style consistency, and grammar heuristics
   - `repetition_variety` — mean of repetition and sentence variety
   - `humanify_diagnostic` — `1.0 - mean_detector_probability`
 - `composite_score`: final weighted score combining all components

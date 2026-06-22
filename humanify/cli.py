@@ -7,10 +7,11 @@ import sys
 import numpy as np
 import torch
 
-from .analysis import ScoringUnit, find_markers, prepare_scoring_units, read_input
+from .analysis import ScoringUnit, find_markers, generate_quality_advice, prepare_scoring_units, read_input
 from .detectors import DETECTORS, get_detector
 from .detectors.base import _ensure_pad_token
 from .output import output_json, output_rich
+from .writing_metrics import compute_writing_metrics
 import os
 
 
@@ -203,6 +204,17 @@ def _main_single(argv: list[str] | None = None) -> int:
                             "Advice mode: stats (rule-based) or llm "
                             "(AI-generated via causal LM)"
                         ))
+    parser.add_argument("--prompt", type=str, default=None,
+                        help=(
+                            "Original writing prompt (improves keyword-coverage "
+                            "and coherence scoring)"
+                        ))
+    parser.add_argument("--style", type=str, default="general",
+                        choices=["general", "academic"],
+                        help=(
+                            "Writing style calibration: general (default) or "
+                            "academic (shifts thresholds for formal prose)"
+                        ))
     args = parser.parse_args(argv)
 
     # Read and prepare input. Detectors score normalized document-like chunks;
@@ -244,10 +256,26 @@ def _main_single(argv: list[str] | None = None) -> int:
     model_label = result["model_label"]
     detector_results = result["detector_results"]
 
+    # Writing quality metrics (deterministic)
+    quality_metrics = compute_writing_metrics(
+        args.prompt or raw, raw
+    )
+    quality_advice = generate_quality_advice(quality_metrics, style=args.style)
+
+    # Extract sentence analysis and top-worst sentences
+    sentence_analysis = quality_metrics.get("sentence_analysis", [])
+    paragraph_analysis = quality_metrics.get("paragraph_analysis", {})
+    from .writing_metrics import get_top_worst_sentences
+    top_worst = {
+        dim: get_top_worst_sentences(sentences, dim, top_n=3)
+        for dim in ("grammar", "specificity", "evidence", "readability")
+    }
+
     # LLM advice generation (reuse causal LM from detector if available)
     llm_advice = None
+    quality_llm_advice = None
     if args.advice == "llm":
-        from .advice_llm import generate_llm_advice
+        from .advice_llm import generate_llm_advice, generate_quality_llm_advice
         causal_lm = None
         for r in detector_results:
             causal_lm = r["detector"].get_causal_lm()
@@ -276,6 +304,10 @@ def _main_single(argv: list[str] | None = None) -> int:
             stats,
             args.threshold,
         )
+        quality_llm_advice = generate_quality_llm_advice(
+            *causal_lm,
+            quality_metrics,
+        )
 
     # Output
     if args.json:
@@ -288,6 +320,12 @@ def _main_single(argv: list[str] | None = None) -> int:
             model_label,
             detector_results=detector_results if len(detector_results) > 1 else None,
             llm_advice=llm_advice,
+            quality_metrics=quality_metrics,
+            quality_advice=quality_advice,
+            quality_llm_advice=quality_llm_advice,
+            sentence_analysis=sentence_analysis,
+            paragraph_analysis=paragraph_analysis,
+            top_worst=top_worst,
         )
     else:
         output_rich(
@@ -299,6 +337,12 @@ def _main_single(argv: list[str] | None = None) -> int:
             model_label,
             detector_results=detector_results if len(detector_results) > 1 else None,
             llm_advice=llm_advice,
+            quality_metrics=quality_metrics,
+            quality_advice=quality_advice,
+            quality_llm_advice=quality_llm_advice,
+            sentence_analysis=sentence_analysis,
+            paragraph_analysis=paragraph_analysis,
+            top_worst=top_worst,
         )
 
     # Some transformer/PyTorch builds can deadlock during interpreter cleanup
