@@ -217,7 +217,7 @@ uv run humanify --json --file examples/mixed-writing-sample.txt
 Top-level fields include:
 
 - `model`: model ID or ensemble label
-- `sentences`: per-sentence text, context-aware probability, and markers
+- `sentences`: per-sentence text, context-aware probability, markers, and (for flagged sentences) `reasons` explaining *why* it reads as AI-like
 - `overall_score`: mean context-aware sentence probability
 - `burstiness`: standard deviation of context-aware sentence probabilities
 - `stats`: mean, standard deviation, minimum, and maximum
@@ -239,7 +239,19 @@ Example shape:
     {
       "text": "It is crucial to leverage robust paradigms.",
       "ai_probability": 0.8712,
-      "markers": ["crucial", "leverage"]
+      "markers": ["crucial", "leverage"],
+      "reasons": [
+        {
+          "type": "generic_phrase",
+          "detail": "generic polished language: 'robust'",
+          "suggestion": "sound more specific — try: strong, dependable, or describe the concrete property"
+        },
+        {
+          "type": "ai_filler",
+          "detail": "AI-typical word(s): crucial, leverage",
+          "suggestion": "these are strong AI signals — replace with simpler wording or drop"
+        }
+      ]
     }
   ],
   "overall_score": 0.8712,
@@ -262,6 +274,21 @@ Example shape:
 ```
 
 Scores in the example are illustrative; actual values depend on the selected detector and model version.
+
+### Sentence reasons
+
+Each sentence at or above the AI threshold also carries a `reasons` array explaining **why** it reads as AI-like, so a high score is never reported without context. Reasons are deterministic (model-free) and combine several detectors:
+
+| `type`            | What it flags                                                        |
+| ----------------- | ------------------------------------------------------------------- |
+| `generic_phrase`  | Generic polished reflection/corporate phrases (e.g. "structured methodology", "deliverables") with a plainer rewrite |
+| `formal_word`     | Words that raise formality above a natural voice (e.g. `ensuring`, `utilize`) with simpler alternatives |
+| `ai_filler`       | AI-typical filler words already captured by `markers`, restated with a fix |
+| `specificity`     | Lack of concrete detail, with the *kind* of detail to add (time/date, quantity, name/tool, example) |
+| `repeated_pattern`| An opener pattern repeated across the document (e.g. `'This …'`, `'I …'`) with alternative openers |
+| `high_score`      | Catch-all fallback for a high-scoring sentence no other detector explained (e.g. "smooth, generic formal structure, no personal detail") |
+
+Reasons are ordered most-specific first, de-duplicated, and capped at five per sentence. The rich terminal output renders them as `because:` / `try:` lines under each flagged sentence.
 
 ## Evaluation mode
 

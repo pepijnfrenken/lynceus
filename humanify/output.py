@@ -59,7 +59,8 @@ def output_json(sentences: list[str], probs: list[float], markers: list[list[str
                 quality_llm_advice: str | None = None,
                 sentence_analysis: list[dict] | None = None,
                 paragraph_analysis: dict | None = None,
-                top_worst: dict | None = None) -> None:
+                top_worst: dict | None = None,
+                reasons: list | None = None) -> None:
     """Print machine-readable JSON."""
     tips, focus, all_marks = generate_advice(
         sentences, probs, markers, stats, threshold
@@ -70,12 +71,16 @@ def output_json(sentences: list[str], probs: list[float], markers: list[list[str
         for s, p, m in focus
     ]
 
+    sent_objs = []
+    for i, (s, p, m) in enumerate(zip(sentences, probs, markers)):
+        obj: dict = {"text": s, "ai_probability": round(p, 4), "markers": m}
+        if reasons is not None and i < len(reasons) and reasons[i]:
+            obj["reasons"] = [r.to_dict() for r in reasons[i]]
+        sent_objs.append(obj)
+
     result = {
         "model": model_name,
-        "sentences": [
-            {"text": s, "ai_probability": round(p, 4), "markers": m}
-            for s, p, m in zip(sentences, probs, markers)
-        ],
+        "sentences": sent_objs,
         "overall_score": round(stats["mean"], 4),
         "burstiness": round(stats["std"], 4),
         "stats": {k: round(v, 4) for k, v in stats.items()},
@@ -139,7 +144,8 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
                 quality_llm_advice: str | None = None,
                 sentence_analysis: list[dict] | None = None,
                 paragraph_analysis: dict | None = None,
-                top_worst: dict | None = None) -> None:
+                top_worst: dict | None = None,
+                reasons: list | None = None) -> None:
     """Print color-coded rich output with advice."""
     console = Console()
     body = Text()
@@ -169,6 +175,11 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
                 f'   \u2514\u2500 markers: {", ".join(f"{m!r}" for m in marks)}\n',
                 style="dim red",
             )
+        # Style reasons: why this sentence scores the way it does.
+        if reasons is not None and idx < len(reasons) and prob >= threshold:
+            for r in reasons[idx]:
+                body.append(f"   \u2514\u2500 because: {r.detail}\n", style="dim yellow")
+                body.append(f"       try: {r.suggestion}\n", style="dim")
         # Sentence-level quality flags
         if sentence_analysis and idx < len(sentence_analysis):
             qflags = sentence_analysis[idx].get("flags", [])

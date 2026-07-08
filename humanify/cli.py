@@ -11,6 +11,7 @@ from .analysis import ScoringUnit, find_markers, generate_quality_advice, prepar
 from .detectors import DETECTORS, get_detector
 from .detectors.base import _ensure_pad_token
 from .output import output_json, output_rich
+from .style_reasons import explain_sentences
 from .writing_metrics import compute_writing_metrics
 import os
 
@@ -271,6 +272,9 @@ def _main_single(argv: list[str] | None = None) -> int:
         for dim in ("grammar", "specificity", "evidence", "readability")
     }
 
+    # Per-sentence explanations for why each sentence scores the way it does.
+    reasons = explain_sentences(sentences, probs, markers, args.threshold)
+
     # LLM advice generation (reuse causal LM from detector if available)
     llm_advice = None
     quality_llm_advice = None
@@ -326,6 +330,7 @@ def _main_single(argv: list[str] | None = None) -> int:
             sentence_analysis=sentence_analysis,
             paragraph_analysis=paragraph_analysis,
             top_worst=top_worst,
+            reasons=reasons,
         )
     else:
         output_rich(
@@ -343,6 +348,7 @@ def _main_single(argv: list[str] | None = None) -> int:
             sentence_analysis=sentence_analysis,
             paragraph_analysis=paragraph_analysis,
             top_worst=top_worst,
+            reasons=reasons,
         )
 
     # Some transformer/PyTorch builds can deadlock during interpreter cleanup
