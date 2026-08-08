@@ -5,12 +5,16 @@ from .tmr import TMRDetector
 from .desklib import DesklibDetector
 from .fast_detect import FastDetectDetector
 from .binoculars import BinocularsDetector
+from .editlens import EditLensDetector
+from .radar import RadarDetector
 
 DETECTORS: dict[str, type[Detector]] = {
     "tmr": TMRDetector,
     "desklib": DesklibDetector,
     "fast-detect": FastDetectDetector,
     "binoculars": BinocularsDetector,
+    "editlens": EditLensDetector,
+    "radar": RadarDetector,
 }
 
 

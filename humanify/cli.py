@@ -8,6 +8,7 @@ import numpy as np
 import torch
 
 from .analysis import ScoringUnit, find_markers, prepare_scoring_units, read_input
+from .artifacts import detect_artifacts
 from .structure import audit_structure
 from .detectors import DETECTORS, get_detector
 from .detectors.base import _ensure_pad_token
@@ -161,6 +162,7 @@ def _score_text(
         "model_label": model_label,
         "detector_results": detector_results,
         "structure_audit": audit_structure(raw),
+        "artifact_audit": detect_artifacts(raw),
     }
 
 
@@ -228,7 +230,7 @@ def _main_single(argv: list[str] | None = None) -> int:
             device_name=args.device,
             suppress_stdout=args.json,
         )
-    except ValueError as e:
+    except (ValueError, RuntimeError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
@@ -292,6 +294,7 @@ def _main_single(argv: list[str] | None = None) -> int:
             detector_results=detector_results if len(detector_results) > 1 else None,
             llm_advice=llm_advice,
             structure_audit=structure_audit,
+            artifact_audit=result["artifact_audit"],
         )
     else:
         output_rich(
@@ -304,6 +307,7 @@ def _main_single(argv: list[str] | None = None) -> int:
             detector_results=detector_results if len(detector_results) > 1 else None,
             llm_advice=llm_advice,
             structure_audit=structure_audit,
+            artifact_audit=result["artifact_audit"],
         )
 
     # Some transformer/PyTorch builds can deadlock during interpreter cleanup

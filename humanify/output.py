@@ -54,7 +54,8 @@ def output_json(sentences: list[str], probs: list[float], markers: list[list[str
                 stats: dict, threshold: float, model_name: str,
                 detector_results: list[dict] | None = None,
                 llm_advice: str | None = None,
-                structure_audit: dict | None = None) -> None:
+                structure_audit: dict | None = None,
+                artifact_audit: dict | None = None) -> None:
     """Print machine-readable JSON."""
     tips, focus, all_marks = generate_advice(
         sentences, probs, markers, stats, threshold
@@ -83,6 +84,7 @@ def output_json(sentences: list[str], probs: list[float], markers: list[list[str
             **({"text": llm_advice} if llm_advice else {}),
         },
         **({"structure_audit": structure_audit} if structure_audit else {}),
+        **({"artifact_audit": artifact_audit} if artifact_audit else {}),
         "disclaimer": (
             "This tool detects statistical similarity to modern AI-generated text. "
             "It is NOT definitive. Known false positives: formal prose, "
@@ -111,7 +113,8 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
                 stats: dict, threshold: float, model_name: str,
                 detector_results: list[dict] | None = None,
                 llm_advice: str | None = None,
-                structure_audit: dict | None = None) -> None:
+                structure_audit: dict | None = None,
+                artifact_audit: dict | None = None) -> None:
     """Print color-coded rich output with advice."""
     console = Console()
     body = Text()
@@ -204,6 +207,31 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
             }.get(f["severity"], "yellow")
             body.append(f'  [{f["kb_ref"]}] {f["name"]} '
                         f'({f["severity"]})\n', style=f"bold {sev_style}")
+            body.append(f"      {f['evidence']}\n", style="dim")
+
+    # Post-processing artifact audit (Task C, Phase 4.3)
+    if artifact_audit and artifact_audit.get("findings"):
+        body.append("\n")
+        body.append(" " + "\u2500" * 44 + "\n", style="dim")
+        body.append(" Post-Processing Artifacts\n", style="bold cyan")
+        body.append(
+            f'  score: {artifact_audit["score"]:.2f}'
+            + (
+                f'\n  EditLens recommended: yes'
+                if artifact_audit.get("editlens_recommended")
+                else ""
+            ),
+            style="dim",
+        )
+        body.append("\n")
+        for f in artifact_audit["findings"]:
+            sev_style = {
+                "low": "green", "medium": "yellow", "high": "red",
+            }.get(f["severity"], "yellow")
+            body.append(
+                f'  [{f["kb_ref"]}] {f["name"]} ({f["severity"]})\n',
+                style=f"bold {sev_style}",
+            )
             body.append(f"      {f['evidence']}\n", style="dim")
 
     # Disclaimer
