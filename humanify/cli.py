@@ -7,7 +7,14 @@ import sys
 import numpy as np
 import torch
 
-from .analysis import ScoringUnit, find_markers, prepare_scoring_units, read_input
+from .analysis import (
+    ScoringUnit,
+    find_markers,
+    find_markers_weighted,
+    prepare_scoring_units,
+    read_input,
+    _AI_WEIGHTS,
+)
 from .artifacts import detect_artifacts
 from .structure import audit_structure
 from .detectors import DETECTORS, get_detector
@@ -103,6 +110,152 @@ def _load_detectors(
     return loaded
 
 
+# Narrative checklist tunables (Task B, Phase 5.2).
+NARRATIVE_MIN_WORDS = 500      # KB: narrative features need long text
+NARRATIVE_MAX_PROMPT_TOKENS = 4096  # tokenizer truncation for the checklist prompt
+
+
+def _axis_name(name: str) -> str | None:
+    """Map a detector name to its per-layer ensemble axis (Task C, Phase 6.1).
+
+    * ``classifier_axis`` -- TMR / Desklib / Radar / EditLens (supervised
+      classifiers; EditLens is edit-magnitude, included here but documented).
+    * ``zero_shot_axis``  -- Fast-DetectGPT (+ Binoculars if non-degenerate).
+    Returns ``None`` for detectors outside the ensemble axes.
+    """
+    if name in ("tmr", "desklib", "radar", "editlens"):
+        return "classifier_axis"
+    if name in ("fast-detect", "binoculars"):
+        return "zero_shot_axis"
+    return None
+
+
+def _lexical_axis_score(sentences: list[str]) -> float:
+    """Normalized era-weighted marker density (KB 02 L1b), in [0, 1].
+
+    Normalization (documented): lexical density = (sum of matched term weights
+    across all sentences) / (num_sentences * max_possible_per_sentence), where
+    max_possible_per_sentence = the sum of ALL era-aware vocabulary weights (the
+    highest density a single sentence could theoretically carry). Clamped to
+    [0, 1]. Higher = more AI-typical vocabulary density.
+    """
+    if not sentences:
+        return 0.0
+    max_possible_per_sentence = sum(_AI_WEIGHTS.values())
+    if max_possible_per_sentence <= 0:
+        return 0.0
+    matched_total = sum(
+        weight for s in sentences for _term, weight in find_markers_weighted(s)
+    )
+    raw = matched_total / (len(sentences) * max_possible_per_sentence)
+    return float(min(max(raw, 0.0), 1.0))
+
+
+# Default (equal) per-axis weights for the weighted summary; documented here.
+_AXIS_WEIGHTS: dict[str, float] = {
+    "classifier_axis": 1.0,
+    "zero_shot_axis": 1.0,
+    "lexical_axis": 1.0,
+    "structural_axis": 1.0,
+    "artifact_axis": 1.0,
+}
+
+
+def _ensemble_axes(
+    detector_results: list[dict],
+    sentences: list[str],
+    structure_audit: dict,
+    artifact_audit: dict,
+    scoring_failures: list[tuple[str, str]] | None = None,
+) -> dict:
+    """Compute per-AXIS evidence + overall score + agreement/confidence.
+
+    Returns ``{"axes": {...}, "confidence": float}``. Axis scores live in
+    [0, 1] (higher = more AI-like). ``axis_agreement`` is the std of available
+    axis scores (higher std = lower confidence); ``confidence`` is derived as
+    ``1 - min(std / 0.5, 1.0)`` (0.5 is the max possible std of a [0,1] value).
+    ``axes["overall"]`` is a weight-mean of the non-missing axis scores.
+    """
+    axis_scores: dict[str, float | None] = {
+        "classifier_axis": None,
+        "zero_shot_axis": None,
+        "lexical_axis": None,
+        "structural_axis": None,
+        "artifact_axis": None,
+    }
+    axis_exclusions: dict[str, list[str]] = {
+        k: [] for k in axis_scores
+    }
+    for name, reason in scoring_failures or []:
+        axis = _axis_name(name)
+        if axis is not None:
+            axis_exclusions[axis].append(f"{name} excluded ({reason})")
+
+    # Detector backbones -> classifier / zero-shot axes.
+    members: dict[str, list[np.ndarray]] = {
+        "classifier_axis": [], "zero_shot_axis": [],
+    }
+    for r in detector_results:
+        axis = _axis_name(r["name"])
+        if axis is None:
+            continue
+        if r["name"] == "binoculars" and getattr(r["detector"], "is_degenerate", False):
+            axis_exclusions[axis].append(
+                f"binoculars excluded (degenerate observer==performer pair)"
+            )
+            continue
+        members[axis].append(np.array(r["probs"]))
+
+    for axis, arrs in members.items():
+        if arrs:
+            axis_scores[axis] = float(np.mean(np.array(arrs).mean(axis=0)))
+
+    # Lexical / structural / artifact axes are always present.
+    axis_scores["lexical_axis"] = _lexical_axis_score(sentences)
+    axis_scores["structural_axis"] = float(structure_audit.get("score", 0.0))
+    axis_scores["artifact_axis"] = float(artifact_audit.get("score", 0.0))
+
+    present = [(k, v) for k, v in axis_scores.items() if v is not None]
+    weights = _AXIS_WEIGHTS
+
+    if present:
+        overall = sum(v * weights[k] for k, v in present) / sum(
+            weights[k] for k, _ in present
+        )
+        vals = np.array([v for _, v in present])
+        axis_agreement = float(vals.std())
+    else:
+        overall = 0.5
+        axis_agreement = 0.0
+
+    confidence = max(0.0, min(1.0, 1.0 - (axis_agreement / 0.5)))
+
+    axes = {
+        "overall": round(overall, 4),
+        "weights": dict(weights),
+        "axis_agreement": round(axis_agreement, 4),
+        "exclusions": axis_exclusions,
+        "axis_definitions": {
+            "classifier_axis": "TMR/Desklib/RADAR/EditLens mean (EditLens = edit-magnitude, included here but orthogonal to authorship)",
+            "zero_shot_axis": "Fast-DetectGPT (+ Binoculars if non-degenerate)",
+            "lexical_axis": "normalized era-aware marker density (mean matched weight / max possible)",
+            "structural_axis": "structure_audit score (T2/T3/T5)",
+            "artifact_axis": "artifact_audit score (post-processing / EditLens risk)",
+        },
+    }
+    axes.update(
+        {k: {"score": (round(v, 4) if v is not None else None),
+             "weight": weights[k],
+             "excluded": axis_exclusions[k]}
+         for k, v in axis_scores.items()}
+    )
+
+    return {
+        "axes": axes,
+        "confidence": round(confidence, 4),
+    }
+
+
 def _score_text(
     raw: str,
     *,
@@ -112,18 +265,25 @@ def _score_text(
     """Score raw text using pre-loaded detectors.
 
     Returns a dict with ``sentences``, ``scoring_units``, ``probs``,
-    ``stats``, ``markers``, ``model_label``, and ``detector_results``.
-    Does not generate advice, rewrite suggestions, or use LLMs.
+    ``stats``, ``markers``, ``model_label``, ``detector_results`` (all
+    backward-compatible) plus ``axes`` and ``confidence`` (per-layer ensemble,
+    Task C / Phase 6.1). Also ``structure_audit`` and ``artifact_audit``.
     """
     sentences, scoring_units = prepare_scoring_units(raw)
     score_texts = [unit.text for unit in scoring_units]
 
     detector_results = []
+    scoring_failures: list[tuple[str, str]] = []  # (name, error)
     for entry in loaded_detectors:
         det = entry["detector"]
         name = entry["name"]
-        unit_probs = det.score(score_texts, batch_size=batch_size)
-        probs = _expand_unit_scores(scoring_units, unit_probs, len(sentences))
+        try:
+            unit_probs = det.score(score_texts, batch_size=batch_size)
+            probs = _expand_unit_scores(scoring_units, unit_probs, len(sentences))
+        except Exception as exc:  # noqa: BLE001 - a detector must never kill a run
+            # Exclude this detector from its axis and note the failure.
+            scoring_failures.append((name, f"score failed: {type(exc).__name__}"))
+            continue
         arr = np.array(probs)
         detector_results.append({
             "name": name,
@@ -136,7 +296,7 @@ def _score_text(
             "detector": det,
         })
 
-    # Ensemble: average probabilities across detectors
+    # Ensemble: average probabilities across detectors (backward compatible).
     if len(detector_results) == 1:
         probs = detector_results[0]["probs"]
         stats = detector_results[0]["stats"]
@@ -152,6 +312,12 @@ def _score_text(
         model_label = "ensemble(" + ",".join(r["name"] for r in detector_results) + ")"
 
     markers = [find_markers(s) for s in sentences]
+    structure_audit = audit_structure(raw)
+    artifact_audit = detect_artifacts(raw)
+    per_layer = _ensemble_axes(
+        detector_results, sentences, structure_audit, artifact_audit,
+        scoring_failures=scoring_failures,
+    )
 
     return {
         "sentences": sentences,
@@ -161,8 +327,10 @@ def _score_text(
         "markers": markers,
         "model_label": model_label,
         "detector_results": detector_results,
-        "structure_audit": audit_structure(raw),
-        "artifact_audit": detect_artifacts(raw),
+        "structure_audit": structure_audit,
+        "artifact_audit": artifact_audit,
+        "axes": per_layer["axes"],
+        "confidence": per_layer["confidence"],
     }
 
 
@@ -202,10 +370,18 @@ def _main_single(argv: list[str] | None = None) -> int:
                             "your CUDA runtime is healthy)"
                         ))
     parser.add_argument("--advice", "-a", type=str, default="stats",
-                        choices=["stats", "llm"],
+                        choices=["stats", "llm", "narrative"],
                         help=(
-                            "Advice mode: stats (rule-based) or llm "
-                            "(AI-generated via causal LM)"
+                            "Advice mode: stats (rule-based), llm (AI-generated "
+                            "via causal LM), or narrative (document-level "
+                            "narrative checklist; needs 500+ words)"
+                        ))
+    parser.add_argument("--domain", type=str, default="creative",
+                        choices=["creative", "academic", "social", "legal"],
+                        help=(
+                            "Domain for calibration: creative (default), "
+                            "academic, social, legal. Adjusts thresholds and "
+                            "adds false-positive warnings."
                         ))
     args = parser.parse_args(argv)
 
@@ -248,67 +424,121 @@ def _main_single(argv: list[str] | None = None) -> int:
     model_label = result["model_label"]
     detector_results = result["detector_results"]
 
-    # LLM advice generation (reuse causal LM from detector if available)
+    # LLM-gated layers: "llm" advice and "narrative" checklist. Both reuse the
+    # detector's causal LM when available, else load Qwen3.5-0.8B-Base. The
+    # narrative checklist is gated at 500+ words and NEVER loads a model for
+    # short input (KB: narrative features need long text; short scores are
+    # noise).
     llm_advice = None
-    if args.advice == "llm":
-        from .advice_llm import generate_llm_advice
-        causal_lm = None
-        for r in detector_results:
-            causal_lm = r["detector"].get_causal_lm()
-            if causal_lm:
-                break
-        if causal_lm is None:
-            # No causal LM loaded — load Qwen3.5-0.8B-Base
-            print("Loading Qwen3.5-0.8B-Base for LLM advice...", file=sys.stderr)
-            from transformers import AutoModelForCausalLM, AutoTokenizer
-            from .detectors.fast_detect import _login_hf
-            _login_hf()
-            _adv_tok = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-0.8B-Base")
-            _ensure_pad_token(_adv_tok)
-            dtype = torch.float16 if use_cuda else None
-            _adv_model = AutoModelForCausalLM.from_pretrained(
-                "Qwen/Qwen3.5-0.8B-Base",
-                dtype=dtype,
-            )
-            _adv_model.to(device).eval()
-            causal_lm = (_adv_model, _adv_tok, device)
-        llm_advice = generate_llm_advice(
-            *causal_lm,
-            sentences,
-            probs,
-            markers,
-            stats,
-            args.threshold,
+    narrative = None
+    if args.advice in ("llm", "narrative"):
+        short_narrative = args.advice == "narrative" and (
+            len(raw.split()) < NARRATIVE_MIN_WORDS
         )
+        if short_narrative:
+            # Gate fires first: no model load, no LLM docs.
+            from .narrative_checklist import run_narrative_checklist
+
+            narrative = run_narrative_checklist(
+                raw, lambda _prompt: "", min_words=NARRATIVE_MIN_WORDS
+            )
+        else:
+            from .advice_llm import (
+                _format_generation_prompt,
+                _pad_token_id,
+                _strip_think_blocks,
+            )
+            if args.advice == "llm":
+                from .advice_llm import generate_llm_advice
+
+            causal_lm = None
+            for r in detector_results:
+                causal_lm = r["detector"].get_causal_lm()
+                if causal_lm:
+                    break
+            if causal_lm is None:
+                # No causal LM loaded — load Qwen3.5-0.8B-Base
+                print("Loading Qwen3.5-0.8B-Base for LLM-assisted analysis...",
+                      file=sys.stderr)
+                from transformers import AutoModelForCausalLM, AutoTokenizer
+                from .detectors.fast_detect import _login_hf
+
+                _login_hf()
+                _adv_tok = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-0.8B-Base")
+                _ensure_pad_token(_adv_tok)
+                dtype = torch.float16 if use_cuda else None
+                _adv_model = AutoModelForCausalLM.from_pretrained(
+                    "Qwen/Qwen3.5-0.8B-Base",
+                    dtype=dtype,
+                )
+                _adv_model.to(device).eval()
+                causal_lm = (_adv_model, _adv_tok, device)
+
+            _model, _tokenizer, _device = causal_lm
+
+            def llm_call(prompt: str) -> str:
+                """Tokenize -> generate -> decode, reusing detector/loaded LM."""
+                formatted = _format_generation_prompt(_tokenizer, prompt)
+                inputs = _tokenizer(
+                    formatted, return_tensors="pt", truncation=True,
+                    max_length=NARRATIVE_MAX_PROMPT_TOKENS,
+                    return_token_type_ids=False,
+                ).to(_device)
+                with torch.no_grad():
+                    output_ids = _model.generate(
+                        **inputs,
+                        max_new_tokens=300,
+                        do_sample=False,
+                        pad_token_id=_pad_token_id(_tokenizer),
+                    )
+                generated = output_ids[0][inputs["input_ids"].shape[1]:]
+                text = _tokenizer.decode(generated,
+                                         skip_special_tokens=True).strip()
+                return _strip_think_blocks(text)
+
+            if args.advice == "llm":
+                llm_advice = generate_llm_advice(
+                    *causal_lm, sentences, probs, markers, stats, args.threshold
+                )
+            else:  # narrative
+                from .narrative_checklist import run_narrative_checklist
+
+                narrative = run_narrative_checklist(
+                    raw, llm_call, min_words=NARRATIVE_MIN_WORDS
+                )
 
     # Output
     structure_audit = result["structure_audit"]
+    axes = result["axes"]
+    confidence = result["confidence"]
+
+    # Domain calibration (Task D / Phase 6.2): adds "domain", "domain_warnings"
+    # and "domain_settings" to the result dict; never removes existing keys.
+    from .calibration import calibrate
+
+    calibrated = calibrate(result, args.domain)
+    domain = calibrated["domain"]
+    domain_settings = calibrated.get("domain_settings", {})
+    domain_warnings = calibrated.get("domain_warnings", [])
+
+    _shared = dict(
+        detector_results=detector_results if len(detector_results) > 1 else None,
+        llm_advice=llm_advice,
+        structure_audit=structure_audit,
+        artifact_audit=result["artifact_audit"],
+        narrative=narrative,
+        axes=axes,
+        confidence=confidence,
+        domain=domain,
+        domain_settings=domain_settings,
+        domain_warnings=domain_warnings,
+    )
     if args.json:
-        output_json(
-            sentences,
-            probs,
-            markers,
-            stats,
-            args.threshold,
-            model_label,
-            detector_results=detector_results if len(detector_results) > 1 else None,
-            llm_advice=llm_advice,
-            structure_audit=structure_audit,
-            artifact_audit=result["artifact_audit"],
-        )
+        output_json(sentences, probs, markers, stats, args.threshold, model_label,
+                    **_shared)
     else:
-        output_rich(
-            sentences,
-            probs,
-            markers,
-            stats,
-            args.threshold,
-            model_label,
-            detector_results=detector_results if len(detector_results) > 1 else None,
-            llm_advice=llm_advice,
-            structure_audit=structure_audit,
-            artifact_audit=result["artifact_audit"],
-        )
+        output_rich(sentences, probs, markers, stats, args.threshold, model_label,
+                    **_shared)
 
     # Some transformer/PyTorch builds can deadlock during interpreter cleanup
     # after successful CPU inference. Flush the rendered result and skip object

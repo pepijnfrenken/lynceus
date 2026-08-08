@@ -55,7 +55,13 @@ def output_json(sentences: list[str], probs: list[float], markers: list[list[str
                 detector_results: list[dict] | None = None,
                 llm_advice: str | None = None,
                 structure_audit: dict | None = None,
-                artifact_audit: dict | None = None) -> None:
+                artifact_audit: dict | None = None,
+                narrative: dict | None = None,
+                axes: dict | None = None,
+                confidence: float | None = None,
+                domain: str | None = None,
+                domain_settings: dict | None = None,
+                domain_warnings: list | None = None) -> None:
     """Print machine-readable JSON."""
     tips, focus, all_marks = generate_advice(
         sentences, probs, markers, stats, threshold
@@ -85,6 +91,12 @@ def output_json(sentences: list[str], probs: list[float], markers: list[list[str
         },
         **({"structure_audit": structure_audit} if structure_audit else {}),
         **({"artifact_audit": artifact_audit} if artifact_audit else {}),
+        **({"narrative": narrative} if narrative else {}),
+        **({"axes": axes} if axes else {}),
+        **({"confidence": confidence} if confidence is not None else {}),
+        **({"domain": domain} if domain else {}),
+        **({"domain_settings": domain_settings} if domain_settings else {}),
+        **({"domain_warnings": domain_warnings} if domain_warnings else {}),
         "disclaimer": (
             "This tool detects statistical similarity to modern AI-generated text. "
             "It is NOT definitive. Known false positives: formal prose, "
@@ -114,7 +126,13 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
                 detector_results: list[dict] | None = None,
                 llm_advice: str | None = None,
                 structure_audit: dict | None = None,
-                artifact_audit: dict | None = None) -> None:
+                artifact_audit: dict | None = None,
+                narrative: dict | None = None,
+                axes: dict | None = None,
+                confidence: float | None = None,
+                domain: str | None = None,
+                domain_settings: dict | None = None,
+                domain_warnings: list | None = None) -> None:
     """Print color-coded rich output with advice."""
     console = Console()
     body = Text()
@@ -233,6 +251,62 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
                 style=f"bold {sev_style}",
             )
             body.append(f"      {f['evidence']}\n", style="dim")
+
+    # Per-layer ensemble axes + confidence (Task C / Phase 6.1)
+    if axes:
+        body.append("\n")
+        body.append(" " + "\u2500" * 44 + "\n", style="dim")
+        body.append(" Per-Layer Evidence\n", style="bold cyan")
+        names = {
+            "classifier_axis": "classifier",
+            "zero_shot_axis": "zero-shot",
+            "lexical_axis": "lexical",
+            "structural_axis": "structural",
+            "artifact_axis": "artifacts",
+        }
+        for k, v in axes.items():
+            if k in names and v.get("score") is not None:
+                body.append(f"  {names[k]:<12s} {v['score'] * 100:5.0f}% AI\n",
+                            style="dim")
+        body.append(f"  {'overall':<12s} {axes['overall'] * 100:5.0f}% AI\n",
+                    style="bold cyan")
+        if confidence is not None:
+            body.append(f"  Confidence:     {confidence * 100:5.0f}% "
+                        f"(agreement spread {axes.get('axis_agreement', 0.0):.3f})\n",
+                        style="dim")
+
+    # Narrative checklist (Task B / Phase 5.2)
+    if narrative is not None:
+        body.append("\n")
+        body.append(" " + "\u2500" * 44 + "\n", style="dim")
+        body.append(" Narrative Checklist\n", style="bold cyan")
+        if not narrative.get("enabled"):
+            reason = narrative.get("reason")
+            body.append(f"  disabled ({reason}) \u2014 needs >=500 words\n",
+                        style="dim")
+        else:
+            body.append(f"  score: {narrative['score']:.2f}  "
+                        f"({len(narrative['flagged'])}/{len(narrative['dimensions'])} "
+                        f"flagged)\n", style="dim")
+            for d in narrative["flagged"]:
+                body.append(f"  - {d['key']}  ({d['direction']})\n", style="yellow")
+                if d.get("evidence"):
+                    body.append(f"      {d['evidence']}\n", style="dim")
+
+    # Domain calibration (Task D / Phase 6.2)
+    if domain:
+        body.append("\n")
+        body.append(" " + "\u2500" * 44 + "\n", style="dim")
+        body.append(f" Domain: {domain}\n", style="bold cyan")
+        for w in domain_warnings or []:
+            body.append(f"  \u26a0 {w}\n", style="yellow")
+        if domain_settings:
+            body.append(
+                f"  setup: burstiness_w={domain_settings.get('burstiness_weight')}, "
+                f"lexical_cap={domain_settings.get('lexical_weight_cap')}, "
+                f"sentence_th={domain_settings.get('sentence_threshold')}\n",
+                style="dim",
+            )
 
     # Disclaimer
     body.append("\n")
