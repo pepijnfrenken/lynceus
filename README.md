@@ -27,6 +27,9 @@ Use it as a writing-quality and risk-review signal, not as proof of authorship.
 - [Writing advice](#writing-advice)
 - [Model overrides](#model-overrides)
 - [Evaluation mode](#evaluation-mode)
+- [Feature analysis layers](#feature-analysis-layers)
+- [Robustness](#robustness)
+- [Red team](#red-team)
 - [Performance](#performance)
 - [Privacy and data handling](#privacy-and-data-handling)
 - [Development](#development)
@@ -168,7 +171,11 @@ The `eval` subcommand provides batch metrics-only evaluation. It accepts a JSONL
 | `tmr` | `Oxidane/tmr-ai-text-detector` | Text-classification pipeline | Fast default reviews | 125M RoBERTa-base model. |
 | `desklib` | `desklib/ai-text-detector-v1.01` | DeBERTa-v3-large classifier | Stronger classifier scoring | Heavier model with stronger resource requirements. |
 | `fast-detect` | `Qwen/Qwen3.5-0.8B-Base` | Fast-DetectGPT-style log-probability curvature | Zero-shot likelihood behavior | Uses a causal LM. |
-| `binoculars` | `Qwen/Qwen3.5-0.8B-Base,Qwen/Qwen3.5-0.8B-Base` | Binoculars-style perplexity ratio | Perplexity-ratio review | Loads two causal LMs; highest memory use among defaults. |
+| `binoculars` | `Qwen/Qwen3.5-0.8B-Base,Qwen/Qwen3.5-0.8B-Base` | Binoculars-style perplexity ratio | Perplexity-ratio review | Loads two causal LMs; highest memory use among defaults. **Default pair is degenerate** (see note). |
+| `editlens` | `pangram/editlens_roberta-large` | AI-edit-magnitude classifier | Text that looks post-processed / paraphrased | CC BY-NC-SA, contact-gated on HF. A separate *edit* axis (0-1) shown apart from authorship probability, never blended into the mean ensemble. |
+| `radar` | `TrustSafeAI/RADAR-Vicuna-7B` | Paraphrase-robust classifier | Text that has already been reworded by a humanizer | Non-commercial license. The one classifier family that stays strong after a paraphrase attack (AUROC ≈ 0.92 post-attack). |
+
+> **Binoculars default caveat.** The shipped `binoculars` default uses the *same* model (`Qwen/Qwen3.5-0.8B-Base`) for both observer and performer roles — cross-perplexity between identical models collapses to plain perplexity. Pass `--model-id observer-model,performer-model` with two different close models for a real Binoculars-style ratio; otherwise read the default as a plain-perplexity signal.
 
 ### Choosing a detector
 
@@ -359,6 +366,71 @@ When `humanify_diagnostic` is unavailable (no detector), the remaining weights a
 ### Metrics safety
 
 All writing metrics are computed deterministically using regular expressions and standard Python libraries. No additional model downloads are required. The metrics module does not import `torch`, `transformers`, or any detector classes. Evaluation output never contains rewrite suggestions, detection-avoidance tactics, or LLM-generated advice.
+
+## Feature analysis layers
+
+Beyond a single score, `humanify` reports several explainable analysis layers, so you can see *why* a passage was flagged:
+
+- **Era-aware vocabulary** — filter-based markers load from `humanify/data/ai_vocab.json` with per-term era tags and weights, so a `delve`/`tapestry` (2023-24 era) flag counts for less than a current `showcase`-type signal.
+- **Pattern tells** — repeatable named findings: sentence-initial connectives (`Moreover`/`Furthermore`/`Additionally`/`In conclusion`), rule-of-three lists, `not … but …` constructions, `-ing`-suffix runs, and em-dash density per 1,000 words (plus the spaced-em-dash variant).
+- **Burstiness bands** — sentence-length coefficient of variation is compared against reference bands (AI-like < 0.30, typical human 0.65–0.85) and given a named verdict, plus a soft "mechanical alternation" autocorrelation warning.
+- **Structure audit** — document-level findings from `humanify/structure.py`: paragraph-length variance, hourglass (generic positive closing paragraph), and formulaic "Challenges and Future Prospects" closings.
+- **Artifact layer** — `humanify/artifacts.py` flags text that looks post-processed: zero-width characters, Unicode homoglyphs, mechanical synonym cycling, or a high edit-magnitude + low lexical-variance combination.
+- **Narrative checklist (opt-in)** — `--advice narrative` runs an LLM-assisted document-level checklist over the Story scope discourse dimensions; gated at **500+ words** and never run on short text.
+- **Per-layer ensemble + confidence** — the ensemble reports each axis (classifier / zero-shot / lexical / structure / edit) separately with a confidence spread instead of a single opaque mean; `--domain academic|creative|social|legal` calibrates weights and emits domain-specific warnings.
+
+## Robustness
+
+`humanify` ships an evaluation harness under `benchmarks/` that measures each
+layer separately instead of a single accuracy figure. Every script reports a
+per-layer breakdown: lexical precision/recall, burstiness AUROC, per-classifier
+AUROC / TPR@5%FPR, and a mean ensemble AUROC.
+
+```bash
+cd /home/pino/humanify
+.venv/bin/python benchmarks/raid_eval.py --fetch --limit 500     # RAID (reference)
+.venv/bin/python benchmarks/m4_eval.py   --fetch --limit 100     # M4 (OOD)
+.venv/bin/python benchmarks/h2l_eval.py  --fetch --limit 100     # H2L (human + LLM rewrite)
+```
+
+**Numbers pending dataset download.** The RAID / M4 / H2L corpora are multi-GB and this harness deliberately never auto-downloads them — `--fetch` prints the manual `huggingface-cli download …` step, and the scripts exit early (code 2) until the split is present. Until then, no real AUROC / TPR figures are claimed in this README.
+
+**The H2L caveat (the honest framing).** The dominant real-world failure mode
+for this kind of text is a human author rewriting text with an LLM ("human-
+polished"), not a raw LLM output. Benchmarks that only compare
+human-vs-direct-LLM text consistently overstate robustness. Treat any robustness
+claim as valid only against the exact distribution it was measured on; humanify
+recommends framing claims around H2L-style text (KB doc 07,
+`~/.omp/knowledge/ai-writing/07-frontier-papers-sweep.md`). Style-level claims
+overstate robustness; structural layers are the durable signal.
+
+## Red team
+
+`redteam/` is the adversarial harness that pressure-tests detection from the
+attacker side (for measurement and regression, not as an end-user feature). It
+now includes:
+
+- **Sampling attacks** — temperature, repetition-penalty, and top-p regeneration
+  sweeps (`sample_temperature`, `sample_rep_penalty`, `sample_top_p`) plus a
+  chained `combo_sample_all`. These target the too-smooth statistical signature
+  that zero-shot detectors depend on (KB 03 §3).
+- **Iterative paraphrase with verification** — `paraphrase_verify` generates,
+  scores with the local detector, and in later rounds rewrites *only* the chunks
+  that still score high, capped at 3 rounds, keeping the best candidate (KB 03 §5).
+- **Guided detector optimization** — `guided_optimize` is a SICO-style basic
+  version that uses 3 style prompts, keeps the best-scoring variant per round and
+  re-applies the best prompt with a rotated seed (KB 03 §1.1), rather than blind
+  single-shot rewrites.
+
+The **StealthWriter detector wrapper is deprecated**: its API endpoint is
+guessed/unverified, and KB 03 finds GPTZero flags StealthWriter output at 100% AI,
+so it is not an informative detection signal. The wrapper is kept only for
+backward compatibility (constructing it emits a `DeprecationWarning`); leave it out
+of new detector sets.
+
+The loop keeps its original CLI (`python redteam/loop.py --input … --detectors
+humanify,gptzero …`). No test depends on Ollama being live — the Ollama call layer
+and the detector are injectable/mocked in the test suite.
 
 ## Writing advice
 

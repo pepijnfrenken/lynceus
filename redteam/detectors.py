@@ -12,6 +12,7 @@ import subprocess
 import time
 import urllib.request
 import urllib.error
+import warnings
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -178,15 +179,30 @@ class GPTZeroDetector:
 
 
 class StealthWriterDetector:
-    """StealthWriter API detector. Rate-limited, needs API key."""
-    
-    # StealthWriter's public API endpoint
+    """StealthWriter API detector. Rate-limited, needs API key.
+
+    .. deprecated:: 7.3
+       This wrapper is kept for CLI backward compatibility ONLY. The endpoint
+       is a guess (originally "adjust based on actual API shape"), the vendor
+       API is unstable, and KB 03 §5.1 notes GPTZero catches StealthWriter
+       output at 100% AI — a dead oracle rather than a useful detection signal.
+       Do not add it to the default detector set; enabling it via the
+       ``--detectors stealthwriter`` flag emits a deprecation warning.
+    """
+
+    # StealthWriter's public API endpoint -- GUESSED, unverified.
     API_URL = "https://www.stealthwriter.ai/api/check"
-    
+
     def __init__(self, api_key: Optional[str] = None):
+        warnings.warn(
+            "StealthWriterDetector is deprecated: the endpoint is guessed and "
+            "KB 03 finds GPTZero flags StealthWriter text at 100% AI. Prefer "
+            "HumanifyDetector / GPTZeroDetector.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.api_key = api_key or os.environ.get("STEALTHWRITER_API_KEY", "")
-        self._last_call = 0.0
-        self._min_interval = 10.0  # conservative rate limit
+        self._last_call = 0.0  # conservative rate limit
     
     def detect(self, text: str) -> DetectionResult:
         """Score text using StealthWriter API."""

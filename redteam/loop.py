@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from redteam.transforms import (
     ALL_TRANSFORMS,
+    SAMPLING_TRANSFORM_MAP,
     apply_all_transforms,
     apply_random_transforms,
     apply_specific_transforms,
@@ -115,6 +116,16 @@ class RedTeamLoop:
             results[name] = detector.detect(text)
         return results
     
+    def _humanify_score(self, text: str) -> float:
+        """Run only the local Humanify detector and return its AI probability.
+
+        Returns 1.0 (worst) on any detector error / missing detector so
+        injected score callables never raise on a broken local back end."""
+        res = self.detect(text).get("humanify")
+        if res is None or res.error or res.ai_probability < 0:
+            return 1.0
+        return res.ai_probability
+
     def check_readability(self, text: str) -> bool:
         """Quick readability check: not too short, not gibberish."""
         words = text.split()
@@ -139,8 +150,36 @@ class RedTeamLoop:
         self.results.append(record)
     
     def get_strategy_text(self, strategy: str, text: str) -> tuple[str, list[str]]:
-        """Apply a named strategy to text."""
-        if strategy == "all_transforms":
+        """Apply a named strategy to text.
+
+        Phase-7 specific strategies (sampling attacks, combo_sample_all,
+        paraphrase_verify, guided_optimize) are matched here BEFORE the generic
+        ``single_``/``combo_`` prefix branches so e.g. ``combo_sample_all`` is
+        not accidentally routed as a ``combo_<name>`` transform combo.
+        """
+        # --- Phase 7: sampling-level attacks (KB 03 3) ---
+        if strategy in SAMPLING_TRANSFORM_MAP:
+            return SAMPLING_TRANSFORM_MAP[strategy](
+                text, model=self.config.ollama_model
+            ), [strategy]
+        elif strategy == "combo_sample_all":
+            from redteam.transforms import combo_sample_all
+            result = combo_sample_all(text, model=self.config.ollama_model)
+            return result, ["combo_sample_all"]
+        elif strategy == "paraphrase_verify":
+            from redteam.transforms import paraphrase_with_verify
+            result, _score, _rounds = paraphrase_with_verify(
+                text, model=self.config.ollama_model, detect_fn=self._humanify_score,
+            )
+            return result, ["paraphrase_verify"]
+        elif strategy == "guided_optimize":
+            from redteam.transforms import guided_optimize
+            result, _score, _used = guided_optimize(
+                text, model=self.config.ollama_model, score_fn=self._humanify_score,
+            )
+            return result, ["guided_optimize"]
+        # --- classic strategies ---
+        elif strategy == "all_transforms":
             return apply_all_transforms(text)
         elif strategy == "random_3":
             return apply_random_transforms(text, n=3)
@@ -148,14 +187,6 @@ class RedTeamLoop:
             return apply_random_transforms(text, n=5)
         elif strategy == "random_7":
             return apply_random_transforms(text, n=7)
-        elif strategy.startswith("single_"):
-            # Apply a single transform
-            name = strategy.replace("single_", "")
-            return apply_specific_transforms(text, [name])
-        elif strategy.startswith("combo_"):
-            # Apply a specific combo
-            names = strategy.replace("combo_", "").split("+")
-            return apply_specific_transforms(text, names)
         elif strategy == "llm_rewrite":
             from redteam.transforms import llm_rewrite
             result = llm_rewrite(text, model=self.config.ollama_model)
@@ -172,9 +203,17 @@ class RedTeamLoop:
             from redteam.transforms import llm_rewrite
             llm_result = llm_rewrite(text, model=self.config.ollama_model)
             return apply_all_transforms(llm_result)
+        elif strategy.startswith("single_"):
+            # Apply a single transform
+            name = strategy.replace("single_", "")
+            return apply_specific_transforms(text, [name])
+        elif strategy.startswith("combo_"):
+            # Apply a specific regex transform combo
+            names = strategy.replace("combo_", "").split("+")
+            return apply_specific_transforms(text, names)
         else:
             return apply_random_transforms(text, n=3)
-    
+
     def run(self, input_text: str):
         """Main loop."""
         if self.config.seed is not None:
@@ -184,15 +223,18 @@ class RedTeamLoop:
         single_transforms = [f"single_{name}" for name, _ in ALL_TRANSFORMS]
         combos = [
             "combo_replace_ai_filler+replace_ai_openers+remove_hedging",
-            "combo_replace_ai_filler+split_long_sentences+add_transitions",
+            "combo_replace_ai_filler+split_long_sentences+vary_sentence_length",
             "combo_remove_hedging+vary_sentence_length+inject_personal_touch",
             "combo_replace_ai_openers+remove_hedging+lowercase_after_connector",
-            "combo_replace_ai_filler+replace_ai_openers+remove_hedging+add_transitions",
+            "combo_replace_ai_filler+replace_ai_openers+remove_hedging+lowercase_after_connector",
             "combo_replace_ai_filler+split_long_sentences+vary_sentence_length+inject_personal_touch",
         ]
         
         all_strategies = (
-            ["llm_rewrite", "llm_aggressive", "llm_paraphrase", "llm+regex"] +
+            ["llm_rewrite", "llm_aggressive", "llm_paraphrase", "llm+regex",
+             "paraphrase_verify", "guided_optimize",
+             "sample_temperature", "sample_rep_penalty", "sample_top_p",
+             "combo_sample_all"] +
             ["all_transforms"] +
             ["random_3", "random_5", "random_7"] +
             single_transforms +

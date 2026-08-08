@@ -280,13 +280,12 @@ ALL_TRANSFORMS: list[tuple[str, Callable[[str], str]]] = [
     ("replace_ai_openers", replace_ai_openers),
     ("remove_hedging", remove_hedging),
     ("split_long_sentences", split_long_sentences),
-    ("add_transitions", add_transitions),
     ("vary_sentence_length", vary_sentence_length),
     ("inject_personal_touch", inject_personal_touch),
     ("lowercase_after_connector", lowercase_after_connector),
     ("reduce_bullet_points", reduce_bullet_points),
-]
 
+]
 
 def apply_random_transforms(text: str, n: int = 3) -> tuple[str, list[str]]:
     """Apply n random transforms and return (result, list of applied transform names)."""
@@ -335,17 +334,32 @@ def apply_specific_transforms(text: str, names: list[str]) -> tuple[str, list[st
 OLLAMA_URL = "http://localhost:11434/api/generate"
 
 
-def _ollama_generate(prompt: str, model: str = "qwen3:1.7b", timeout: int = 60) -> str:
-    """Call Ollama API with thinking disabled for fast inference."""
+def _ollama_generate(
+    prompt: str,
+    model: str = "qwen3:1.7b",
+    timeout: int = 60,
+    options: dict | None = None,
+) -> str:
+    """Call Ollama HTTP API with thinking disabled for fast inference.
+
+    *options* is an optional dict of Ollama sampling options (``temperature``,
+    ``top_p``, ``repeat_penalty``, ...) merged over a sane default of
+    ``{"temperature": 0.7}``. Sampling-level attack transforms pass their own
+    options through this dict (KB 03 §3).
+    """
     import urllib.request
     import json as _json
-    
+
+    opts = {"temperature": 0.7}
+    if options:
+        opts.update(options)
+
     payload = _json.dumps({
         "model": model,
         "prompt": prompt,
         "stream": False,
         "think": False,
-        "options": {"temperature": 0.7},
+        "options": opts,
     }).encode("utf-8")
     
     req = urllib.request.Request(
@@ -459,3 +473,236 @@ def llm_rewrite_paraphrase(text: str, model: str = "qwen3:1.7b") -> str:
             rewritten.append(sent)
     
     return ' '.join(rewritten)
+
+
+# ─── Sampling-level attack transforms ────────────────────────────
+# KB 03 §3: temperature / repetition-penalty / top-p sweeps flatten the
+# too-smooth statistical signature detectors rely on. Ollama exposes them as
+# per-call ``options``; we keep the existing ``_ollama_generate`` contract and
+# pass the attacker-chosen options through the ``options`` dict.
+# NOTE: these regenerated the WHOLE text via Ollama, so they are kept OUT of
+# the pure-regex ``ALL_TRANSFORMS`` list (which ``apply_*`` helpers run with a
+# single ``Callable[[str], str]``). They live in ``SAMPLING_TRANSFORMS`` and are
+# dispatched by ``loop.py`` via ``apply_sampling_transform`` (Task 7.1).
+
+_SAMPLING_REGEN_PROMPT = (
+    "Regenerate the following text, preserving its meaning, information and "
+    "structure exactly. Make no commentary. Return ONLY the regenerated text, "
+    "nothing else.\n\nText:\n"
+)
+
+
+def sample_temperature(text: str, model: str = "qwen3:1.7b", temperature: float = 1.4) -> str:
+    """Regenerate *text* with elevated sampling temperature (flattens the
+    next-token distribution; ``T = 1.4`` breaks the too-smooth signature,
+    KB 03 §3.2)."""
+    return _ollama_generate(
+        _SAMPLING_REGEN_PROMPT + text,
+        model=model,
+        timeout=120,
+        options={"temperature": temperature},
+    )
+
+
+def sample_rep_penalty(text: str, model: str = "qwen3:1.7b", rep_penalty: float = 1.08) -> str:
+    """Regenerate *text* with a mild repetition/frequency penalty.
+
+    Ollama exposes this as the ``repeat_penalty`` option (its official option
+    name; the API rejects ``frequency_penalty``). 1.05-1.15 is the sweet spot;
+    stronger values degrade coherence (KB 03 §3.2)."""
+    return _ollama_generate(
+        _SAMPLING_REGEN_PROMPT + text,
+        model=model,
+        timeout=120,
+        options={"repeat_penalty": rep_penalty},
+    )
+
+
+def sample_top_p(text: str, model: str = "qwen3:1.7b", top_p: float = 0.9) -> str:
+    """Regenerate *text* with nucleus sampling ``top_p = 0.9`` (changes tail
+    behavior of the next-token pool; weak standalone, pairs with T≈1, KB 03)."""
+    return _ollama_generate(
+        _SAMPLING_REGEN_PROMPT + text,
+        model=model,
+        timeout=120,
+        options={"top_p": top_p},
+    )
+
+
+# Sampling transforms are (name, callable) pairs whose signature is
+# ``fn(text, model=..., **opt)`` — NOT the plain ``Callable[[str], str]`` used
+# by ``ALL_TRANSFORMS``.
+SAMPLING_TRANSFORMS: list[tuple[str, Callable]] = [
+    ("sample_temperature", sample_temperature),
+    ("sample_rep_penalty", sample_rep_penalty),
+    ("sample_top_p", sample_top_p),
+]
+SAMPLING_TRANSFORM_MAP: dict[str, Callable] = dict(SAMPLING_TRANSFORMS)
+
+
+def apply_sampling_transform(
+    text: str,
+    name: str,
+    model: str = "qwen3:1.7b",
+) -> tuple[str, list[str]]:
+    """Apply a single named sampling transform (Ollama-backed).
+
+    Returns ``(result, [name])`` for symmetry with the regex ``apply_*``
+    helpers, or ``(text, [])`` when the name is unknown.
+    """
+    fn = SAMPLING_TRANSFORM_MAP.get(name)
+    if fn is None:
+        return text, []
+    return fn(text, model=model), [name]
+
+
+def combo_sample_all(text: str, model: str = "qwen3:1.7b") -> str:
+    """Chain temperature + repetition penalty + top-p regeneration (Task 7.1
+    combo). Each step regenerates the whole text with its sampling option."""
+    result = text
+    for _name, fn in SAMPLING_TRANSFORMS:
+        result = fn(result, model=model)
+    return result
+
+
+# ─── Iterative paraphrase loop with verify (Task 7.2) ────────────
+# KB 03 §5: generate → detect → rewrite ONLY flagged chunks → max ~3 rounds →
+# keep best. `detect_fn: Callable[[str], float]` (lower = more human-like AI
+# probability) is INJECTED by the caller so the loop stays decoupled from any
+# particular detector.
+
+_PARAPHRASE_FLAG_THRESHOLD = 0.5  # detect() > threshold → chunk is "flagged"
+
+
+def _rewrite_flagged_chunks(
+    text: str,
+    model: str,
+    detect_fn,
+    flag_threshold: float = _PARAPHRASE_FLAG_THRESHOLD,
+) -> str:
+    """Rewrite only the sentence-chunks that still score above *flag_threshold*.
+
+    Low-scoring chunks are kept byte-identical. This is the "re-iterate only
+    flagged paragraphs" step of the KB pipeline (KB 03 §5, layer 7)."""
+    sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+    out = []
+    for sent in sentences:
+        if not sent.strip():
+            continue
+        score = detect_fn(sent)
+        if score > flag_threshold:
+            prompt = (
+                "Rewrite this sentence to sound like a natural human wrote it. "
+                "Keep the meaning. Vary the structure, avoid machine-favored "
+                "words. Return ONLY the rewritten sentence, nothing else.\n\n"
+                f"Sentence: {sent}"
+            )
+            try:
+                rewritten = _ollama_generate(prompt, model=model, timeout=60)
+                out.append(rewritten if rewritten else sent)
+            except Exception:
+                out.append(sent)
+        else:
+            out.append(sent)
+    return ' '.join(out)
+
+
+def paraphrase_with_verify(
+    text: str,
+    model: str = "qwen3:1.7b",
+    detect_fn: Callable[[str], float] | None = None,
+    max_rounds: int = 3,
+) -> tuple[str, float, int]:
+    """Iterative paraphrase with detector verification (KB 03 §5 pipeline).
+
+    * Round 1 rewrites the WHOLE text (reuses the ``llm_rewrite`` logic).
+    * Rounds 2..max_rounds rewrite ONLY the chunks a per-chunk detection still
+      flags.
+    * Best-scoring candidate is kept across rounds; never worse than the input.
+
+    Returns ``(best_text, best_score, rounds_used)``.
+
+    ``detect_fn`` is injected; ``None`` disables the verify signal (keeps the
+    input unchanged, best_score = 1.0)."""
+    if detect_fn is None:
+        detect_fn = lambda _t: 1.0  # never improves, keep original
+
+    best_text = text
+    best_score = detect_fn(text)
+    current = text
+    rounds_used = 0
+
+    for r in range(1, int(max_rounds) + 1):
+        rounds_used = r
+        if r == 1:
+            candidate = llm_rewrite(current, model=model)
+        else:
+            candidate = _rewrite_flagged_chunks(
+                current, model, detect_fn,
+                flag_threshold=_PARAPHRASE_FLAG_THRESHOLD,
+            )
+        score = detect_fn(candidate)
+        if score < best_score:
+            best_score = score
+            best_text = candidate
+        current = candidate
+
+    return best_text, best_score, rounds_used
+
+
+# ─── Guided detector-based optimization (Task 7.3, SICO-lite) ────
+# KB 03 §1.1: SICO treats the detector score as a loss to minimize against
+# prompt variants. This is the "basic version" the plan asks for: a small
+# hardcoded set of style instructions, generate → score → keep best → mutate
+# (re-apply the best variant with a rotated prompt seed). Deterministic-ish.
+
+GUIDED_STYLE_PROMPTS: list[str] = [
+    "Rewrite this text to sound like a natural human blog writer: contractions, "
+    "mixed sentence lengths, concrete examples instead of abstractions.",
+    "Rewrite this text in an informal, conversational register with varied "
+    "rhythm and occasional rhetorical questions.",
+    "Rewrite this text with deliberate imperfection: vary sentence length "
+    "wildly, avoid formulaic transitions, drop a placeholder detail.",
+]
+
+
+def guided_optimize(
+    text: str,
+    model: str = "qwen3:1.7b",
+    score_fn: Callable[[str], float] | None = None,
+    iterations: int = 5,
+) -> tuple[str, float, int]:
+    """SICO-lite detector-guided prompt optimization over style instructions.
+
+    For *iterations* rounds, generate a variant from the current best text under
+    a (cycling) style prompt, score it with ``score_fn`` (injected; lower =
+    more human-like), keep the best, and mutate by re-applying on the newest
+    best with a per-round seed suffix. Returns ``(best_text, best_score, used)``.
+
+    ``score_fn`` is injected so this never reaches for an external detector."""
+    if score_fn is None:
+        score_fn = lambda _t: 1.0
+    if iterations is None or iterations < 1:
+        iterations = 1
+
+    best_text = text
+    best_score = score_fn(text)
+    used = 0
+    for i in range(int(iterations)):
+        used = i + 1
+        variant = GUIDED_STYLE_PROMPTS[i % len(GUIDED_STYLE_PROMPTS)]
+        prompt = (
+            f"{variant} Variant #{i}; produce a genuinely different rewrite "
+            "than the previous one.\n\nText:\n" + best_text
+        )
+        try:
+            candidate = _ollama_generate(prompt, model=model, timeout=120)
+        except Exception:
+            continue
+        if not candidate.strip():
+            continue
+        score = score_fn(candidate)
+        if score < best_score:
+            best_score = score
+            best_text = candidate
+    return best_text, best_score, used
