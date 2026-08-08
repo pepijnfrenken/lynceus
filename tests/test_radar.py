@@ -38,13 +38,17 @@ class RadarModelIdTest(unittest.TestCase):
 
 
 class RadarScoreTest(unittest.TestCase):
+    # Long enough (>MIN_RELIABLE_WORDS) that the short-text calibration does
+    # not alter the raw RADAR score.
+    LONG_TEXT = "word " * 150
+
     def test_score_is_bounded_float_per_text(self):
         det = RadarDetector()
         det._pipe = FakePipeline([
             _fake_pipeline_row([("LABEL_0", 0.9), ("LABEL_1", 0.1)]),
             _fake_pipeline_row([("LABEL_0", 0.2), ("LABEL_1", 0.8)]),
         ])
-        scores = det.score(["first segment.", "second segment."], batch_size=2)
+        scores = det.score([self.LONG_TEXT, self.LONG_TEXT], batch_size=2)
         self.assertEqual(len(scores), 2)
         self.assertTrue(0.0 <= scores[0] <= 1.0)
         self.assertTrue(0.0 <= scores[1] <= 1.0)
@@ -58,22 +62,42 @@ class RadarScoreTest(unittest.TestCase):
             _fake_pipeline_row([("AI", 0.81), ("Human", 0.19)]),
             _fake_pipeline_row([("AI", 0.05), ("Human", 0.95)]),
         ])
-        scores = det.score(["a", "b"])
+        scores = det.score([self.LONG_TEXT, self.LONG_TEXT])
         self.assertAlmostEqual(scores[0], 0.81)
         self.assertAlmostEqual(scores[1], 0.05)
 
     def test_human_only_labels_invert(self):
         det = RadarDetector()
-        det._pipe = FakePipeline([
-            _fake_pipeline_row([("human", 0.9), ("human", 0.1)] + []),
-        ])
-        # duplicate key collapses; use distinct keys instead
         det2 = RadarDetector()
         det2._pipe = FakePipeline([
             _fake_pipeline_row([("human-written", 0.2), ("LABEL_1", 0.8)]),
         ])
-        scores = det2.score(["sample text"], batch_size=1)
+        scores = det2.score([self.LONG_TEXT], batch_size=1)
         self.assertAlmostEqual(scores[0], 0.8)
+
+    def test_short_text_calibration_pulls_toward_neutral(self):
+        # Measured saturation: a 10-word human snippet reads ~0.999 raw; the
+        # calibrated score must be pulled well below 0.7 (weak evidence).
+        from humanify.detectors.radar import _calibrate_short_text, MIN_RELIABLE_WORDS
+
+        self.assertAlmostEqual(_calibrate_short_text(0.999, 10), 0.5 + 0.499 * 0.1)
+        # At/above the threshold the raw score is returned unchanged.
+        self.assertAlmostEqual(_calibrate_short_text(0.999, MIN_RELIABLE_WORDS), 0.999)
+        self.assertAlmostEqual(_calibrate_short_text(0.057, 150), 0.057)
+        # Monotone: more words -> closer to raw.
+        self.assertLess(
+            _calibrate_short_text(0.999, 20), _calibrate_short_text(0.999, 50)
+        )
+
+    def test_score_calibrates_short_text(self):
+        det = RadarDetector()
+        det._pipe = FakePipeline([
+            _fake_pipeline_row([("LABEL_0", 0.999), ("LABEL_1", 0.001)]),
+        ])
+        # "short text" = 2 words -> heavily blended toward 0.5.
+        scores = det.score(["short text"], batch_size=1)
+        self.assertGreaterEqual(scores[0], 0.5)
+        self.assertLess(scores[0], 0.7)
 
 
 class FakePipeline:

@@ -21,6 +21,15 @@ model cards that do ship named labels, ``score()``:
 2. elif labels name Human-style classes -> return `1 - human`-prob;
 3. else fall back to the RADAR convention -> return LABEL_0's probability.
 
+# SHORT-TEXT CALIBRATION (MEASURED 2026-08-08)
+
+Empirical probe on this exact checkpoint found RADAR **saturates toward class 0
+(AI) on inputs under ~100 words**: human 1984 text scored 0.999 at 9-40 words
+but 0.057 at 110 words; AI text scored ~0.99 at every length. So short human
+text is a systematic false positive. ``score()`` therefore blends short-text
+scores toward neutral 0.5 linearly below ``MIN_RELIABLE_WORDS`` — a short
+snippet's RADAR reading is treated as weak evidence, not a confident AI verdict.
+
 License is a Vicuna-derived **non-commercial** license (per the model card).
 """
 
@@ -29,6 +38,10 @@ import torch
 from .base import Detector
 
 MAX_LENGTH = 512
+
+# Below this many words RADAR saturates toward class-0 (AI) on ALL input,
+# including clearly human text. Measured threshold: reliable at >= ~100 words.
+MIN_RELIABLE_WORDS = 100
 
 # Pipeline-based text-classification, like ``tmr``. Imported at module scope so
 # tests can monkeypatch a fake pipeline straight onto the instance.
@@ -69,6 +82,20 @@ def _resolve_ai_probability(row: list[dict]) -> float:
     return float(max(v for v in by_label.values()))
 
 
+def _calibrate_short_text(ai_prob: float, word_count: int) -> float:
+    """Blend a RADAR score toward 0.5 for short inputs (measured saturation).
+
+    At ``word_count >= MIN_RELIABLE_WORDS`` the raw score is returned
+    unchanged. Below that, linearly interpolate toward 0.5: a 10-word snippet
+    with a raw 0.999 reading becomes ~0.55 — weak evidence, not a confident
+    AI verdict. The blend is monotone and never overshoots the raw score.
+    """
+    if word_count >= MIN_RELIABLE_WORDS or word_count <= 0:
+        return float(ai_prob)
+    strength = word_count / MIN_RELIABLE_WORDS
+    return float(0.5 + (ai_prob - 0.5) * strength)
+
+
 class RadarDetector(Detector):
     """Wrap TrustSafeAI/RADAR-Vicuna-7B as a paragraph-paraphrase-robust detector."""
 
@@ -99,7 +126,13 @@ class RadarDetector(Detector):
         results = self._pipe(
             texts, batch_size=batch_size, truncation=True, max_length=MAX_LENGTH
         )
-        return [_resolve_ai_probability(row) for row in results]
+        scores = [_resolve_ai_probability(row) for row in results]
+        # Short-text calibration: RADAR saturates to ~1.0 (AI) on ANY input
+        # under ~100 words, so pull short readings toward neutral 0.5.
+        return [
+            _calibrate_short_text(score, len(text.split()))
+            for score, text in zip(scores, texts)
+        ]
 
     @property
     def name(self) -> str:
