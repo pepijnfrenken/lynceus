@@ -8,6 +8,7 @@ import numpy as np
 import torch
 
 from .analysis import ScoringUnit, find_markers, prepare_scoring_units, read_input
+from .structure import audit_structure
 from .detectors import DETECTORS, get_detector
 from .detectors.base import _ensure_pad_token
 from .output import output_json, output_rich
@@ -159,6 +160,7 @@ def _score_text(
         "markers": markers,
         "model_label": model_label,
         "detector_results": detector_results,
+        "structure_audit": audit_structure(raw),
     }
 
 
@@ -278,6 +280,7 @@ def _main_single(argv: list[str] | None = None) -> int:
         )
 
     # Output
+    structure_audit = result["structure_audit"]
     if args.json:
         output_json(
             sentences,
@@ -288,6 +291,7 @@ def _main_single(argv: list[str] | None = None) -> int:
             model_label,
             detector_results=detector_results if len(detector_results) > 1 else None,
             llm_advice=llm_advice,
+            structure_audit=structure_audit,
         )
     else:
         output_rich(
@@ -299,6 +303,7 @@ def _main_single(argv: list[str] | None = None) -> int:
             model_label,
             detector_results=detector_results if len(detector_results) > 1 else None,
             llm_advice=llm_advice,
+            structure_audit=structure_audit,
         )
 
     # Some transformer/PyTorch builds can deadlock during interpreter cleanup

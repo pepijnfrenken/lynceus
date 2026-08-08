@@ -1,0 +1,478 @@
+[
+  {
+    "term": "delve",
+    "era": "2023-2024",
+    "weight": 0.3,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "tapestry",
+    "era": "2023-2024",
+    "weight": 0.3,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "intricate",
+    "era": "2023-2024",
+    "weight": 0.3,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "meticulous",
+    "era": "2023-2024",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "endeavor",
+    "era": "2023-2024",
+    "weight": 0.3,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "pivotal",
+    "era": "2023-2024",
+    "weight": 0.35,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "testament",
+    "era": "2023-2024",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "henceforth",
+    "era": "2023-2024",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "ascertain",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "paradigm",
+    "era": "any",
+    "weight": 0.5,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "synergy",
+    "era": "any",
+    "weight": 0.5,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "multifaceted",
+    "era": "any",
+    "weight": 0.5,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "holistic",
+    "era": "any",
+    "weight": 0.5,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "underscore",
+    "era": "2025",
+    "weight": 0.6,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "leverage",
+    "era": "2025",
+    "weight": 0.6,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "shaping the future",
+    "era": "any",
+    "weight": 0.4,
+    "category": "opener",
+    "reliability": 2
+  },
+  {
+    "term": "robust",
+    "era": "any",
+    "weight": 0.5,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "comprehensive",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "significant",
+    "era": "any",
+    "weight": 0.3,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "essential",
+    "era": "any",
+    "weight": 0.3,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "crucial",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "innovative",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "cutting-edge",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "groundbreaking",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "transformative",
+    "era": "any",
+    "weight": 0.5,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "streamline",
+    "era": "any",
+    "weight": 0.5,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "optimize",
+    "era": "any",
+    "weight": 0.5,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "foster",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "facilitate",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "notably",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "albeit",
+    "era": "any",
+    "weight": 0.3,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "myriad",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "ubiquitous",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "ephemeral",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "poignant",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "nuanced",
+    "era": "any",
+    "weight": 0.5,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "unparalleled",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "spearhead",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "juxtapose",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "aforementioned",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "whereby",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "thereby",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "therein",
+    "era": "any",
+    "weight": 0.4,
+    "category": "lexical",
+    "reliability": 2
+  },
+  {
+    "term": "showcase",
+    "era": "2026",
+    "weight": 0.8,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "emphasizing",
+    "era": "2026",
+    "weight": 0.8,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "enhance",
+    "era": "2026",
+    "weight": 0.8,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "highlighting",
+    "era": "2026",
+    "weight": 0.8,
+    "category": "lexical",
+    "reliability": 3
+  },
+  {
+    "term": "furthermore",
+    "era": "any",
+    "weight": 0.3,
+    "category": "connective",
+    "reliability": 2
+  },
+  {
+    "term": "moreover",
+    "era": "any",
+    "weight": 0.3,
+    "category": "connective",
+    "reliability": 2
+  },
+  {
+    "term": "additionally",
+    "era": "any",
+    "weight": 0.3,
+    "category": "connective",
+    "reliability": 2
+  },
+  {
+    "term": "however",
+    "era": "any",
+    "weight": 0.3,
+    "category": "connective",
+    "reliability": 2
+  },
+  {
+    "term": "nevertheless",
+    "era": "any",
+    "weight": 0.3,
+    "category": "connective",
+    "reliability": 2
+  },
+  {
+    "term": "therefore",
+    "era": "any",
+    "weight": 0.3,
+    "category": "connective",
+    "reliability": 2
+  },
+  {
+    "term": "consequently",
+    "era": "any",
+    "weight": 0.3,
+    "category": "connective",
+    "reliability": 2
+  },
+  {
+    "term": "subsequently",
+    "era": "any",
+    "weight": 0.3,
+    "category": "connective",
+    "reliability": 2
+  },
+  {
+    "term": "notwithstanding",
+    "era": "any",
+    "weight": 0.3,
+    "category": "connective",
+    "reliability": 2
+  },
+  {
+    "term": "in conclusion",
+    "era": "any",
+    "weight": 0.35,
+    "category": "connective",
+    "reliability": 2
+  },
+  {
+    "term": "in summary",
+    "era": "any",
+    "weight": 0.35,
+    "category": "connective",
+    "reliability": 2
+  },
+  {
+    "term": "it's worth noting",
+    "era": "any",
+    "weight": 0.5,
+    "category": "opener",
+    "reliability": 3
+  },
+  {
+    "term": "it is worth noting",
+    "era": "any",
+    "weight": 0.5,
+    "category": "opener",
+    "reliability": 3
+  },
+  {
+    "term": "it is important to note",
+    "era": "any",
+    "weight": 0.5,
+    "category": "opener",
+    "reliability": 3
+  },
+  {
+    "term": "in today's world",
+    "era": "any",
+    "weight": 0.4,
+    "category": "opener",
+    "reliability": 3
+  },
+  {
+    "term": "as we navigate",
+    "era": "any",
+    "weight": 0.4,
+    "category": "opener",
+    "reliability": 3
+  },
+  {
+    "term": "plays a vital role",
+    "era": "any",
+    "weight": 0.4,
+    "category": "opener",
+    "reliability": 2
+  },
+  {
+    "term": "shaping the future",
+    "era": "any",
+    "weight": 0.4,
+    "category": "opener",
+    "reliability": 2
+  },
+  {
+    "term": "in this context",
+    "era": "any",
+    "weight": 0.3,
+    "category": "opener",
+    "reliability": 2
+  },
+  {
+    "term": "at the end of the day",
+    "era": "any",
+    "weight": 0.2,
+    "category": "opener",
+    "reliability": 2
+  },
+  {
+    "term": "essentially",
+    "era": "any",
+    "weight": 0.3,
+    "category": "lexical",
+    "reliability": 2
+  }
+]

@@ -1,9 +1,12 @@
 """Model-agnostic analysis: markers, advice, sentence splitting, input reading."""
 
+import json
 import re
+import statistics
 import sys
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 
 DEFAULT_MAX_SCORING_WORDS = 320
 
@@ -16,30 +19,140 @@ class ScoringUnit:
     start: int
     stop: int
 
+# Era-aware AI vocabulary, loaded from a data file (KB 02 L1b).
+# Each entry: {"term", "era", "weight", "category", "reliability"}.
+_AI_VOCAB_PATH = Path(__file__).parent / "data" / "ai_vocab.json"
+with open(_AI_VOCAB_PATH, encoding="utf-8") as _vocab_f:
+    _AI_VOCAB = json.load(_vocab_f)
+
 # AI filler phrases (case-insensitive substring match)
-AI_FILLERS: set[str] = {
-    "furthermore", "moreover", "crucial", "leverage", "robust",
-    "comprehensive", "significant", "notably", "essentially",
-    "delve", "tapestry", "intricate", "pivotal", "testament",
-    "underscore", "multifaceted", "holistic", "paradigm", "synergy",
-    "innovative", "cutting-edge", "groundbreaking", "transformative",
-    "streamline", "optimize", "foster", "facilitate", "endeavor",
-    "ascertain", "subsequently", "consequently", "nevertheless",
-    "notwithstanding", "albeit", "whereby", "therein", "henceforth",
-    "aforementioned", "juxtapose", "myriad", "ubiquitous", "ephemeral",
-    "poignant", "nuanced", "meticulous", "unparalleled", "spearhead",
-    "in conclusion", "it's worth noting", "it is worth noting",
-    "it is important to note", "in today's world", "as we navigate",
-    "plays a vital role", "shaping the future",
-    "in this context", "at the end of the day",
+AI_FILLERS: set[str] = {entry["term"] for entry in _AI_VOCAB}
+
+# Term -> per-term signal weight (0.0 weak .. 1.0 strong, era-aware).
+_AI_WEIGHTS: dict[str, float] = {
+    entry["term"].lower(): float(entry["weight"]) for entry in _AI_VOCAB
+}
+# Term -> KB reliability (1 weak .. 3 strong).
+_AI_RELIABILITY: dict[str, int] = {
+    entry["term"].lower(): int(entry["reliability"]) for entry in _AI_VOCAB
+}
+# Term -> era tag, for explainable findings.
+_AI_ERAS: dict[str, str] = {
+    entry["term"].lower(): entry["era"] for entry in _AI_VOCAB
 }
 _AI_FILLERS_LOWER = {p.lower() for p in AI_FILLERS}
 
 
 def find_markers(sentence: str) -> list[str]:
-    """Find AI filler phrases in a sentence."""
+    """Find AI filler phrases in a sentence.
+
+    Returns the sorted set of matched terms (backward compatible signature).
+    """
     lower = sentence.lower()
     return sorted({p for p in _AI_FILLERS_LOWER if p in lower})
+
+
+def find_markers_weighted(sentence: str) -> list[tuple[str, float]]:
+    """Find AI filler phrases with their era-aware signal weight.
+
+    Returns a list of ``(term, weight)`` for every matched term. Current-era
+    terms (e.g. ``showcase`` in 2026) carry a higher weight than stale
+    2023-era words (e.g. ``delve``), and common connectives that humans also
+    use are intentionally down-weighted (KB 02 L10/S10).
+    """
+    matched: dict[str, float] = {}
+    lower = sentence.lower()
+    for term in _AI_FILLERS_LOWER:
+        if term in lower:
+            matched[term] = _AI_WEIGHTS.get(term, 0.3)
+    return sorted(matched.items())
+
+
+# ---------------------------------------------------------------------------
+# Pattern tells (KB 02 S1/S2/S7/S10, L3) -- explainable, never bare numbers
+# ---------------------------------------------------------------------------
+
+_CONNECTIVE_OPENERS = (
+    "moreover", "furthermore", "additionally", "in conclusion", "in summary",
+    "however", "nevertheless", "therefore",
+)
+_RULE_OF_THREE = re.compile(
+    r"\b[a-z][a-z0-9-]*\s*,\s*[a-z][a-z0-9-]*\s*,?\s+(?:and|&)\s+[a-z][a-z0-9-]*",
+    re.IGNORECASE,
+)
+_NOT_X_BUT_Y = re.compile(
+    r"\bnot\s+(?:only\s+)?(?!but\b)(.*?)\s+but\s+(?:also\s+)?(.*?)[\s.!?]",
+    re.IGNORECASE,
+)
+# L3 -- two or more consecutive bare "-ing" verb phrases chained by a
+# coordinating/listing connector (", 'and', 'plus', 'but', 'or').
+# "leveraging X and utilizing Y" fires; "she is reading a book about cooking"
+# (separate gerunds with no connector) stays silent.
+_ING_ANALYSIS = re.compile(
+    r"\b(\w+ing)\b[^.!?]*?(?:,| and | plus | but | or )[^.!?]*?\b(\w+ing)\b",
+    re.IGNORECASE,
+)
+
+
+def _sentence_opener_word(sentence: str) -> str | None:
+    """Return a matching connective-word opener (S10) or ``None``."""
+    words = sentence.lower().split()
+    if not words:
+        return None
+    cands = [words[0].strip(".,;:!?()\"'")]
+    if len(words) >= 2:
+        cands.append(
+            " ".join(w.strip(".,;:!?()\"'") for w in words[:2])
+        )
+    for c in cands:
+        if c in _CONNECTIVE_OPENERS:
+            return c
+    return None
+
+
+def find_pattern_tells(sentence: str) -> list[tuple[str, float, str]]:
+    """Detect KB 02 structural/pattern tells in a single sentence.
+
+    Returns a list of ``(pattern_name, weight, matched_text)``. Each pattern is
+    a *named, cheap, explainable* finding -- never a bare probability. Single
+    weak tells are never proof on their own (KB 03 8.5).
+    """
+    tells: list[tuple[str, float, str]] = []
+
+    # S10 -- sentence-initial formulaic connective
+    opener = _sentence_opener_word(sentence)
+    if opener is not None:
+        tells.append(("connective_opener", 0.3, opener))
+
+    # S1 -- rule of three (tricolon)
+    m = _RULE_OF_THREE.search(sentence)
+    if m:
+        tells.append(("rule_of_three", 0.4, m.group(0)))
+
+    # S2 -- not-X-but-Y / not only...but
+    m = _NOT_X_BUT_Y.search(sentence)
+    if m:
+        tells.append(("not_x_but_y", 0.5, m.group(0)))
+
+    # L3 -- consecutive 2+ "-ing" verb phrases
+    m = _ING_ANALYSIS.search(sentence)
+    if m:
+        tells.append(("ing_analysis", 0.4, m.group(0)))
+
+    # S7 -- em-dash usage (density handled at document level)
+    n_dashes = sentence.count("\u2014")
+    if n_dashes > 0:
+        tells.append(("em_dash", 0.3, "\u2014" * n_dashes))
+
+    return tells
+
+_PATTERN_LABELS: dict[str, str] = {
+    "connective_opener": "connective sentence-starter (S10)",
+    "rule_of_three": "rule-of-three list (S1)",
+    "not_x_but_y": "not-X-but-Y negative parallelism (S4/S2)",
+    "ing_analysis": "consecutive -ing analysis phrases (L3)",
+    "em_dash": "em-dash usage (S7)",
+}
 
 
 def normalize_for_detection(text: str) -> str:
@@ -141,6 +254,31 @@ def _sentence_openers(sentences: list[str]) -> list[tuple[str, int]]:
     return Counter(openers).most_common(5)
 
 
+def _burstiness_band(sentences: list[str]) -> str:
+    """Classify std/mean sentence-length CV into a KB 02 S5 burstiness band."""
+    word_counts = [len(s.split()) for s in sentences] if sentences else [0]
+    raw_std = statistics.pstdev(word_counts) if len(word_counts) >= 2 else 0.0
+    mean_wc = statistics.mean(word_counts)
+    ratio = raw_std / mean_wc if mean_wc > 0 else 0.0
+    if ratio < 0.30:
+        return "ai_like"
+    if ratio < 0.65:
+        return "mixed"
+    if ratio <= 0.85:
+        return "human_like"
+    return "over_varied"
+
+
+def _em_dash_density_per_1k(sentences: list[str]) -> float:
+    """Em-dashes (— and en-dashes –) per 1,000 words (S7)."""
+    text = " ".join(sentences)
+    n_words = len(text.split())
+    if n_words <= 0:
+        return 0.0
+    n_dashes = text.count("\u2014") + text.count("\u2013")
+    return (n_dashes * 1000.0) / n_words
+
+
 def generate_advice(
     sentences: list[str],
     probs: list[float],
@@ -159,6 +297,21 @@ def generate_advice(
             "\u26a0 Burstiness is low \u2014 your sentences all score similarly. "
             "Mix in more varied phrasing and personal voice."
         )
+    # 1a. Burstiness band + em-dash density (KB 02 S5 humzakt bands / S7)
+    # The band tip needs a few sentences to be meaningful, so we only surface it
+    # with 4+ sentences to avoid noisy advice on tiny inputs.
+    if len(sentences) >= 4 and _burstiness_band(sentences) == "ai_like":
+        tips.append(
+            "\u26a0 Sentence lengths are unnaturally uniform (AI-like "
+            "burstiness band). Mix short and long sentences to sound more human."
+        )
+    emdash = _em_dash_density_per_1k(sentences)
+    if emdash > 10:
+        tips.append(
+            f"\u26a0 Heavy em-dash usage ({emdash:.1f} per 1,000 words). "
+            "Em-dashes are a strong AI/casual signature \u2014 prefer commas "
+            "or restructure instead."
+        )
     # 2. Long sentences
     long_sents = [(i, s) for i, s in enumerate(sentences) if len(s.split()) > 30]
     if long_sents:
@@ -176,16 +329,38 @@ def generate_advice(
                 "Vary how you begin sentences \u2014 "
                 "try subordinate clauses or questions."
             )
-    # 4. Marker frequency
+    # 4. Marker frequency (era-weighted: surface higher-weight matches first)
     all_marks = [m for marks in markers for m in marks]
     if all_marks:
-        top = Counter(all_marks).most_common(3)
-        words = ", ".join(f'"{w}" ({n}x)' for w, n in top)
+        weight_map: dict[str, float] = {}
+        for s in sentences:
+            for term, w in find_markers_weighted(s):
+                if w > weight_map.get(term, -1.0):
+                    weight_map[term] = w
+        top = sorted(weight_map.items(), key=lambda kv: (-kv[1], kv[0]))[:3]
+        words = ", ".join(f'"{w}" ({weight:.2f})' for w, weight in top)
         tips.append(
             f"\u26a0 AI-typical words detected: {words}. "
-            "These are strong signals \u2014 "
+            "Current-era high-weight signs in particular \u2014 "
             "use sparingly or replace with simpler alternatives."
         )
+
+    # 4a. Pattern tells (KB 02 S1/S2/S7/S10/L3) -- named, explainable
+    pattern_seen: dict[str, list[int]] = {}
+    for i, s in enumerate(sentences):
+        for name, _w, _txt in find_pattern_tells(s):
+            pattern_seen.setdefault(name, []).append(i + 1)
+    if pattern_seen:
+        bits = []
+        for name in sorted(pattern_seen):
+            lbl = _PATTERN_LABELS.get(name, name)
+            idxs = ", ".join(f"s{n}" for n in pattern_seen[name])
+            bits.append(f"{lbl} in {idxs}")
+        tips.append(
+            f"\u26a0 AI-typical patterns: {'; '.join(bits)}. "
+            "These constructions read as formulaic \u2014 vary them."
+        )
+
     # 5. Overall assessment
     high_ai = sum(1 for p in probs if p >= threshold)
     if high_ai > len(probs) * 0.7:

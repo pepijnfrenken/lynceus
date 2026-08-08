@@ -10,19 +10,27 @@ def _is_none_or_in_range(value, lo=0.0, hi=1.0):
     return value is None or lo <= value <= hi
 
 
+def _assert_nested_normalized_in_range(value, path: str):
+    """Recursively assert numeric metrics are None or in [0, 1].
+
+    Nested dicts (e.g. ``coherence_rubric``, ``signal_flags``) are traversed;
+    categorical string flags (e.g. ``burstiness_band``) and ``None`` are
+    allowed.
+    """
+    if isinstance(value, dict):
+        for k, v in value.items():
+            _assert_nested_normalized_in_range(v, f"{path}.{k}")
+    elif isinstance(value, (int, float)):
+        assert _is_none_or_in_range(value), (
+            f"{path}={value!r} not in [0,1] or None"
+        )
+
+
 def _check_all_normalized_in_range(result: dict, msg: str = ""):
-    """Assert every normalized metric is either None or in [0, 1]."""
+    """Assert every normalized numeric metric is either None or in [0, 1]."""
     norm = result["normalized"]
     for key, val in norm.items():
-        if key == "coherence_rubric" and isinstance(val, dict):
-            for sub_key, sub_val in val.items():
-                assert _is_none_or_in_range(sub_val), (
-                    f"{msg}: normalized.{key}.{sub_key}={sub_val!r} not in [0,1] or None"
-                )
-        else:
-            assert _is_none_or_in_range(val), (
-                f"{msg}: normalized.{key}={val!r} not in [0,1] or None"
-            )
+        _assert_nested_normalized_in_range(val, f"{msg}.normalized.{key}")
 
 
 class ClampTest(unittest.TestCase):
@@ -226,6 +234,69 @@ class WritingMetricsTest(unittest.TestCase):
                 result = compute_writing_metrics(prompt, cand)
                 _check_all_normalized_in_range(result, msg=f"candidate[{i}]")
 
+
+
+
+class SignalFlagsTest(unittest.TestCase):
+    """Task E (Phase 3.3): burstiness band, em-dash density, fake burstiness."""
+
+    def test_signal_flags_present_in_both_raw_and_normalized(self):
+        result = compute_writing_metrics(
+            "Describe a scene.", "The quick brown fox jumps over the lazy dog."
+        )
+        self.assertIn("signal_flags", result["raw"])
+        self.assertIn("signal_flags", result["normalized"])
+        for flags in (result["raw"]["signal_flags"], result["normalized"]["signal_flags"]):
+            self.assertIn("burstiness_band", flags)
+            self.assertIn("em_dash_density", flags)
+            self.assertIn("fake_burstiness", flags)
+
+    def test_uniform_sentence_lengths_map_to_ai_like_band(self):
+        candidate = (
+            "The quick brown fox here. The lazy dog there. "
+            "The red bird sings. The blue fish swims."
+        )
+        result = compute_writing_metrics("p", candidate)
+        self.assertEqual(
+            result["raw"]["signal_flags"]["burstiness_band"], "ai_like"
+        )
+
+    def test_em_dash_density_positive_and_normalized_in_range(self):
+        candidate = (
+            "There is a thing — a big thing — and also – that one."
+        )
+        result = compute_writing_metrics("p", candidate)
+        raw = result["raw"]["signal_flags"]["em_dash_density"]
+        norm = result["normalized"]["signal_flags"]["em_dash_density"]
+        self.assertGreater(raw, 0.0)
+        self.assertGreaterEqual(norm, 0.0)
+        self.assertLessEqual(norm, 1.0)
+
+    def test_no_em_dash_gives_zero_density(self):
+        result = compute_writing_metrics(
+            "p", "Plain text with no dashes anywhere at all here."
+        )
+        self.assertEqual(result["raw"]["signal_flags"]["em_dash_density"], 0.0)
+
+    def test_alternating_sentence_lengths_flag_suspicious(self):
+        candidate = (
+            "Four words here now. "
+            "Twelve words here now going strong pattern nicely. "
+            "Four words here now. "
+            "Twelve words here now going strong pattern nicely. "
+            "Four words here now. "
+            "Twelve words here now going strong pattern nicely. "
+        )
+        result = compute_writing_metrics("p", candidate)
+        self.assertEqual(
+            result["raw"]["signal_flags"]["fake_burstiness"], "suspicious_alternation"
+        )
+
+    def test_few_sentences_never_suspicious(self):
+        result = compute_writing_metrics("p", 
+            "This is sentence one here. This is sentence two there."
+        )
+        self.assertEqual(result["raw"]["signal_flags"]["fake_burstiness"], "normal")
 
 if __name__ == "__main__":
     unittest.main()

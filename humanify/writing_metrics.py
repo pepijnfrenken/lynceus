@@ -4,6 +4,8 @@ import re
 import statistics
 from collections import Counter
 
+import numpy as np
+
 from .analysis import normalize_for_detection, split_sentences
 
 
@@ -340,6 +342,74 @@ def _compute_style_consistency(
 
 
 # ---------------------------------------------------------------------------
+# Burstiness / signal flags (KB 02 S5 humzakt bands; PhD S7 em-dash; lag-1
+# autocorrelation "fake burstiness" heuristic)
+# ---------------------------------------------------------------------------
+
+def _classify_burstiness_band(ratio: float) -> str:
+    """Classify std/mean sentence-length CV into a KB 02 S5 burstiness band."""
+    if ratio < 0.30:
+        return "ai_like"
+    if ratio < 0.65:
+        return "mixed"
+    if ratio <= 0.85:
+        return "human_like"
+    return "over_varied"
+
+
+def _em_dash_density(text: str, n_words: int) -> float:
+    """Em-dashes (— and en-dashes –) per 1,000 words (S7)."""
+    if n_words <= 0:
+        return 0.0
+    n_dashes = text.count("\u2014") + text.count("\u2013")
+    return (n_dashes * 1000.0) / n_words
+
+
+def _lag1_autocorrelation(word_counts: list[int]) -> float:
+    """Normalized lag-1 autocorrelation of sentence-lengths (numpy)."""
+    if len(word_counts) < 2:
+        return 0.0
+    arr = np.asarray(word_counts, dtype=float)
+    arr = arr - arr.mean()
+    denom = float(np.sum(arr * arr))
+    if denom <= 0.0:
+        return 0.0
+    return float(np.sum(arr[:-1] * arr[1:]) / denom)
+
+
+def _compute_signal_flags(
+    sentences: list[str],
+    text: str,
+    words: list[str],
+    raw_sentence_variety: dict,
+) -> dict:
+    """Burstiness band, em-dash density, and fake-burstiness flags."""
+    word_counts = [len(s.split()) for s in sentences] if sentences else [0]
+    mean_wc = statistics.mean(word_counts) if word_counts else 0.0
+    ratio = (
+        raw_sentence_variety.get("raw_std", 0.0) / mean_wc
+        if mean_wc > 0
+        else 0.0
+    )
+    band = _classify_burstiness_band(ratio)
+
+    n_words = len(words)
+    emdash_density_raw = _em_dash_density(text, n_words)
+
+    r1 = _lag1_autocorrelation(word_counts)
+    if abs(r1) > 0.5 and len(word_counts) >= 6:
+        fake_burstiness = "suspicious_alternation"
+    else:
+        fake_burstiness = "normal"
+
+    return {
+        "burstiness_band": band,
+        "em_dash_density": emdash_density_raw,
+        "fake_burstiness": fake_burstiness,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -439,6 +509,10 @@ def compute_writing_metrics(
     # --- 6. Style consistency --------------------------------------------
     style_raw, style_norm = _compute_style_consistency(sentences)
 
+    # --- 7. Signal flags (burstiness band, em-dash density, fake burstiness) --
+    sig = _compute_signal_flags(sentences, candidate, words, sentvar_raw)
+    w_norm = clamp(sig["em_dash_density"] / 20.0, 0.0, 1.0)
+
     return {
         "raw": {
             "readability": readability_raw,
@@ -447,6 +521,11 @@ def compute_writing_metrics(
             "repetition": rep_raw,
             "coherence_rubric": coherence_raw,
             "style_consistency": style_raw,
+            "signal_flags": {
+                "burstiness_band": sig["burstiness_band"],
+                "em_dash_density": sig["em_dash_density"],
+                "fake_burstiness": sig["fake_burstiness"],
+            },
         },
         "normalized": {
             "readability": readability_norm,
@@ -455,5 +534,10 @@ def compute_writing_metrics(
             "repetition": rep_norm,
             "coherence_rubric": coherence_norm,
             "style_consistency": style_norm,
+            "signal_flags": {
+                "burstiness_band": sig["burstiness_band"],
+                "em_dash_density": round(w_norm, 4),
+                "fake_burstiness": sig["fake_burstiness"],
+            },
         },
     }
