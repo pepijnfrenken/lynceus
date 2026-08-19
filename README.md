@@ -8,6 +8,8 @@
 
 Use it as a writing-quality and risk-review signal, not as proof of authorship.
 
+![CI](https://github.com/pepijnfrenken/humanify/actions/workflows/ci.yml/badge.svg)
+
 ## Why use it
 
 - **Sentence-level evidence**: see which passages contributed to the score instead of only a document-level verdict.
@@ -538,10 +540,10 @@ Install dependencies:
 uv sync
 ```
 
-Run tests:
+Run the test suite (requires `uv sync` to have installed the `dev` group):
 
 ```bash
-uv run python -m unittest discover tests
+uv run python -m pytest tests/
 ```
 
 Compile-check the package:
@@ -549,6 +551,16 @@ Compile-check the package:
 ```bash
 uv run python -m compileall humanify tests
 ```
+
+### Cross-detector benchmark
+
+`benchmarks/spectrum_eval.py` is a reproducible cross-detector benchmark: it scores a curated spectrum of writing (human voice → light AI polish → heavy AI rewrite → fully AI-generated) with every registered detector and reports AUROC, TPR@5%FPR, and macro-F1 per detector, plus a simple ensemble. Results are checked into `benchmarks/spectrum_bench.json`. Run it with:
+
+```bash
+uv run python benchmarks/spectrum_eval.py
+```
+
+Pass `--detectors` to limit the set (e.g. `--detectors tmr,fast-detect`) and `--out` to write results elsewhere; the full default set downloads the large detector weights on first run.
 
 Run the CLI locally:
 
