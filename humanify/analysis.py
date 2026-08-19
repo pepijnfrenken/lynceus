@@ -384,3 +384,157 @@ def generate_advice(
         key=lambda x: -x[1],
     )[:3]
     return tips, focus, all_marks
+
+
+def generate_quality_advice(metrics: dict, style: str = "general") -> list[str]:
+    """Generate concrete writing-quality advice from metric results.
+
+    Parameters
+    ----------
+    metrics:
+        The dict returned by ``compute_writing_metrics()``.
+    style:
+        ``"general"`` (default) or ``"academic"``. Shifts thresholds to
+        account for formal academic prose conventions.
+
+    Returns
+    -------
+    List of balanced tips: green checkmarks for strengths and yellow
+    warnings for weaknesses.
+    """
+    is_academic = style == "academic"
+    tips = []
+    raw = metrics.get("raw", {})
+    norm = metrics.get("normalized", {})
+    pa = metrics.get("paragraph_analysis", {})
+
+    # Thresholds depend on style
+    passive_thresh = 0.40 if is_academic else 0.20
+    weak_thresh = 0.10 if is_academic else 0.05
+    runon_thresh = 0.15 if is_academic else 0.20
+    vague_thresh = 0.08 if is_academic else 0.05
+    abstract_thresh = 0.25 if is_academic else 0.15
+    concrete_thresh = 0.15 if is_academic else 0.30
+    citation_thresh = 0.05 if is_academic else 0.10
+    example_thresh = 0.05 if is_academic else 0.10
+    data_thresh = 0.05 if is_academic else 0.10
+    experience_thresh = 0.05 if is_academic else 0.10
+
+    # --- Grammar heuristics ---
+    grammar_norm = norm.get("grammar_heuristics", 0.5)
+    grammar_raw = raw.get("grammar_heuristics", {})
+    if grammar_norm < 0.5:
+        issues = []
+        if grammar_raw.get("passive_ratio", 0) > passive_thresh:
+            issues.append("passive voice")
+        if grammar_raw.get("weak_modifier_ratio", 0) > weak_thresh:
+            issues.append("weak modifiers (very, really, quite)")
+        if grammar_raw.get("runon_ratio", 0) > runon_thresh:
+            issues.append("run-on sentences")
+        if issues:
+            tips.append(
+                f"\u26a0 Grammar: {', '.join(issues)} detected. "
+                "Use active voice, cut filler words, and break long sentences."
+            )
+        else:
+            tips.append(
+                "\u26a0 Grammar heuristics flag room for improvement. "
+                "Review sentence structure and word choice."
+            )
+    elif grammar_norm >= 0.8:
+        tips.append(
+            "\u2713 Grammar: strong active voice and clean sentence structure."
+        )
+
+    # --- Specificity ---
+    specificity_norm = norm.get("specificity", 0.5)
+    specificity_raw = raw.get("specificity", {})
+    if specificity_norm < 0.5:
+        issues = []
+        if specificity_raw.get("vague_word_ratio", 0) > vague_thresh:
+            issues.append("vague words (thing, stuff, good, bad)")
+        if specificity_raw.get("abstract_noun_ratio", 0) > abstract_thresh:
+            issues.append("abstract nouns (-tion, -ness, -ity)")
+        if specificity_raw.get("concrete_detail_ratio", 0) < concrete_thresh:
+            issues.append("lack of concrete details")
+        if issues:
+            tips.append(
+                f"\u26a0 Specificity: {', '.join(issues)}. "
+                "Replace abstractions with numbers, names, dates, and vivid examples."
+            )
+        else:
+            tips.append(
+                "\u26a0 Specificity could be stronger. Add concrete details and precise language."
+            )
+    elif specificity_norm >= 0.7:
+        tips.append(
+            "\u2713 Specificity: concrete details and precise language make this vivid."
+        )
+
+    # --- Evidence ---
+    evidence_norm = norm.get("evidence", 0.0)
+    evidence_raw = raw.get("evidence", {})
+    if evidence_norm < 0.3:
+        issues = []
+        if evidence_raw.get("citation_density", 0) < citation_thresh:
+            issues.append("citations")
+        if evidence_raw.get("example_density", 0) < example_thresh:
+            issues.append("examples")
+        if evidence_raw.get("data_density", 0) < data_thresh:
+            issues.append("data/statistics")
+        if evidence_raw.get("experience_density", 0) < experience_thresh:
+            issues.append("personal experience")
+        if issues:
+            tips.append(
+                f"\u26a0 Evidence: missing {', '.join(issues)}. "
+                "Strengthen claims with research, examples, or firsthand observations."
+            )
+        else:
+            tips.append(
+                "\u26a0 Evidence is thin. Add citations, examples, or data to support claims."
+            )
+    elif evidence_norm >= 0.6:
+        tips.append(
+            "\u2713 Evidence: well-supported with citations, examples, or data."
+        )
+
+    # --- Paragraph structure ---
+    if pa:
+        n_para = pa.get("paragraph_count", 0)
+        if n_para > 0:
+            if pa.get("topic_sentence_coverage", 0) < 0.5:
+                tips.append(
+                    "\u26a0 Paragraphs: many paragraphs lack a clear topic sentence. "
+                    "Start each paragraph with a focused claim."
+                )
+            elif pa.get("topic_sentence_coverage", 0) >= 0.8:
+                tips.append(
+                    "\u2713 Paragraphs: most paragraphs open with clear topic sentences."
+                )
+
+            if pa.get("paragraph_transition_coverage", 0) < 0.2:
+                tips.append(
+                    "\u26a0 Flow: few paragraph transitions detected. "
+                    "Use signposting words to guide readers between ideas."
+                )
+            elif pa.get("paragraph_transition_coverage", 0) >= 0.5:
+                tips.append(
+                    "\u2713 Flow: good paragraph-level transitions keep the argument coherent."
+                )
+
+            if pa.get("thesis_alignment", 0) < 0.1 and n_para >= 2:
+                tips.append(
+                    "\u26a0 Structure: introduction and conclusion share few keywords. "
+                    "Ensure the conclusion directly addresses the claims made in the introduction."
+                )
+            elif pa.get("thesis_alignment", 0) >= 0.3:
+                tips.append(
+                    "\u2713 Structure: introduction and conclusion are well-aligned."
+                )
+
+    if not tips:
+        tips.append(
+            "\u2713 Writing quality is balanced \u2014 no major issues or standout weaknesses."
+        )
+
+    return tips

@@ -37,6 +37,66 @@ _TRANSITIONS: frozenset[str] = frozenset({
 })
 
 
+# ---------------------------------------------------------------------------
+# Grammar / specificity / evidence constants
+# ---------------------------------------------------------------------------
+
+_PASSIVE_RE = re.compile(
+    r"\b(?:am|is|are|was|were|be|been|being)\s+[a-z]{3,}(?:ed|en)\b",
+    re.IGNORECASE,
+)
+
+_WEAK_MODIFIERS: frozenset[str] = frozenset({
+    "very", "really", "quite", "rather", "somewhat", "fairly", "pretty",
+    "kind", "sort", "extremely", "incredibly", "totally", "completely",
+    "absolutely", "highly", "deeply", "greatly", "strongly", "especially",
+    "particularly", "mainly", "mostly", "basically", "literally", "actually",
+    "definitely", "certainly", "probably", "maybe", "perhaps", "possibly",
+    "just", "only", "simply", "merely", "almost", "nearly", "roughly",
+    "around", "about", "approximately",
+})
+
+_VAGUE_WORDS: frozenset[str] = frozenset({
+    "thing", "things", "stuff", "aspect", "aspects", "factor", "factors",
+    "nature", "something", "someone", "somebody", "anything", "everything",
+    "nothing", "everyone", "anyone", "good", "bad", "important", "interesting",
+    "nice", "great", "hard", "easy", "big", "small", "lot", "lots", "many",
+    "much", "various", "several", "certain", "general", "overall", "basically",
+    "essentially", "ultimately", "obviously", "clearly", "definitely",
+    "absolutely", "completely", "totally", "really", "very", "quite",
+    "rather", "pretty", "fairly", "somewhat", "somehow", "somewhere",
+    "sometime", "always", "never", "often", "sometimes", "usually",
+    "probably", "maybe", "perhaps", "possibly", "likely", "unlikely",
+})
+
+_ABSTRACT_SUFFIXES = ("tion", "sion", "ment", "ness", "ity", "ance", "ence", "ism", "cy")
+
+_CITATION_RE = re.compile(
+    r"\([A-Z][A-Za-z\s&]+,?\s*\d{4}[a-z]?\)|\[\d+\]|\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s*\(\d{4}[a-z]?\)",
+)
+
+_EXAMPLE_SIGNALS: frozenset[str] = frozenset({
+    "for example", "for instance", "such as", "e.g.", "i.e.", "namely",
+    "to illustrate", "as an example", "take for example", "consider the",
+    "illustrated by", "demonstrated by",
+})
+
+_DATA_SIGNALS: frozenset[str] = frozenset({
+    "percent", "percentage", "study", "studies", "research", "survey",
+    "surveys", "data", "statistics", "statistic", "finding", "findings",
+    "result", "results", "found that", "showed that", "demonstrated that",
+    "reported that", "according to", "evidence suggests", "studies show",
+    "research indicates", "data shows", "figures show", "survey found",
+})
+
+_EXPERIENCE_SIGNALS: frozenset[str] = frozenset({
+    "i observed", "i noticed", "i saw", "i experienced", "i witnessed",
+    "i found", "i discovered", "i learned", "in my experience",
+    "from my experience", "from my perspective", "in my view",
+    "personally", "i believe", "i feel", "i think", "my experience",
+})
+
+
 def clamp(value: float, lo: float, hi: float) -> float:
     """Clamp *value* to the inclusive interval [*lo*, *hi*]."""
     if value < lo:
@@ -409,6 +469,500 @@ def _compute_signal_flags(
     }
 
 
+# Grammar heuristics
+# ---------------------------------------------------------------------------
+
+def _compute_grammar_heuristics(
+    sentences: list[str], words: list[str]
+) -> tuple[dict[str, float], float]:
+    """Return (raw-dict, normalized) grammar heuristics."""
+    n_sentences = len(sentences) if sentences else 0
+    n_words = len(words) if words else 0
+
+    if n_sentences == 0 or n_words == 0:
+        return {
+            "passive_ratio": 0.0,
+            "weak_modifier_ratio": 0.0,
+            "runon_ratio": 0.0,
+        }, 1.0
+
+    passive_count = sum(1 for s in sentences if _PASSIVE_RE.search(s))
+    passive_ratio = passive_count / n_sentences
+
+    weak_count = sum(
+        1 for w in words if w.lower().rstrip(".,;:!?") in _WEAK_MODIFIERS
+    )
+    weak_modifier_ratio = weak_count / n_words
+
+    runon_count = 0
+    for s in sentences:
+        if s.count(",") > 2 and len(s.split()) > 25:
+            runon_count += 1
+    runon_ratio = runon_count / n_sentences
+
+    raw = {
+        "passive_ratio": passive_ratio,
+        "weak_modifier_ratio": weak_modifier_ratio,
+        "runon_ratio": runon_ratio,
+    }
+
+    passive_norm = 1.0 - clamp(passive_ratio / 0.5, 0.0, 1.0)
+    weak_norm = 1.0 - clamp(weak_modifier_ratio / 0.15, 0.0, 1.0)
+    runon_norm = 1.0 - clamp(runon_ratio / 0.5, 0.0, 1.0)
+    normalized = statistics.mean([passive_norm, weak_norm, runon_norm])
+
+    return raw, normalized
+
+
+# ---------------------------------------------------------------------------
+# Specificity
+# ---------------------------------------------------------------------------
+
+def _is_abstract_noun(word: str) -> bool:
+    w = word.lower().rstrip(".,;:!?")
+    return w.endswith(_ABSTRACT_SUFFIXES)
+
+
+def _compute_specificity(
+    sentences: list[str], words: list[str]
+) -> tuple[dict[str, float], float]:
+    """Return (raw-dict, normalized) specificity metrics."""
+    n_sentences = len(sentences) if sentences else 0
+    n_words = len(words) if words else 0
+
+    if n_sentences == 0 or n_words == 0:
+        return {
+            "vague_word_ratio": 0.0,
+            "abstract_noun_ratio": 0.0,
+            "concrete_detail_ratio": 0.0,
+        }, 0.5
+
+    vague_count = sum(
+        1 for w in words if w.lower().rstrip(".,;:!?") in _VAGUE_WORDS
+    )
+    vague_word_ratio = vague_count / n_words
+
+    abstract_count = sum(1 for w in words if _is_abstract_noun(w))
+    abstract_noun_ratio = abstract_count / n_words
+
+    concrete_count = 0
+    for s in sentences:
+        has_number = bool(re.search(r"\d", s))
+        has_date = bool(re.search(r"\b(?:19|20)\d{2}\b", s))
+        has_percent = bool(re.search(r"\d+\s*%|\d+\s*percent", s, re.IGNORECASE))
+
+        words_in_sent = s.split()
+        has_proper = False
+        for i, w in enumerate(words_in_sent):
+            if i == 0:
+                continue
+            clean = w.strip("(),;:.!?\"'")
+            if len(clean) > 1 and clean[0].isupper() and not clean.islower():
+                has_proper = True
+                break
+
+        if has_number or has_date or has_percent or has_proper:
+            concrete_count += 1
+
+    concrete_detail_ratio = concrete_count / n_sentences
+
+    raw = {
+        "vague_word_ratio": vague_word_ratio,
+        "abstract_noun_ratio": abstract_noun_ratio,
+        "concrete_detail_ratio": concrete_detail_ratio,
+    }
+
+    vague_norm = 1.0 - clamp(vague_word_ratio / 0.10, 0.0, 1.0)
+    abstract_norm = 1.0 - clamp(abstract_noun_ratio / 0.20, 0.0, 1.0)
+    concrete_norm = clamp(concrete_detail_ratio / 0.50, 0.0, 1.0)
+    normalized = statistics.mean([vague_norm, abstract_norm, concrete_norm])
+
+    return raw, normalized
+
+
+# ---------------------------------------------------------------------------
+# Evidence
+# ---------------------------------------------------------------------------
+
+def _compute_evidence(sentences: list[str]) -> tuple[dict[str, float], float]:
+    """Return (raw-dict, normalized) evidence metrics."""
+    n_sentences = len(sentences) if sentences else 0
+
+    if n_sentences == 0:
+        return {
+            "citation_density": 0.0,
+            "example_density": 0.0,
+            "data_density": 0.0,
+            "experience_density": 0.0,
+        }, 0.0
+
+    citation_count = 0
+    example_count = 0
+    data_count = 0
+    experience_count = 0
+
+    for s in sentences:
+        lower = s.lower()
+
+        if _CITATION_RE.search(s):
+            citation_count += 1
+
+        for signal in _EXAMPLE_SIGNALS:
+            if signal in lower:
+                example_count += 1
+                break
+
+        for signal in _DATA_SIGNALS:
+            if signal in lower:
+                data_count += 1
+                break
+
+        for signal in _EXPERIENCE_SIGNALS:
+            if signal in lower:
+                experience_count += 1
+                break
+
+    raw = {
+        "citation_density": citation_count / n_sentences,
+        "example_density": example_count / n_sentences,
+        "data_density": data_count / n_sentences,
+        "experience_density": experience_count / n_sentences,
+    }
+
+    citation_norm = clamp(raw["citation_density"] / 0.30, 0.0, 1.0)
+    example_norm = clamp(raw["example_density"] / 0.30, 0.0, 1.0)
+    data_norm = clamp(raw["data_density"] / 0.30, 0.0, 1.0)
+    experience_norm = clamp(raw["experience_density"] / 0.30, 0.0, 1.0)
+    normalized = statistics.mean([citation_norm, example_norm, data_norm, experience_norm])
+
+    return raw, normalized
+
+
+# ---------------------------------------------------------------------------
+# Sentence-level analysis
+# ---------------------------------------------------------------------------
+
+def _sentence_has_passive(sentence: str) -> bool:
+    return bool(_PASSIVE_RE.search(sentence))
+
+def _sentence_has_weak_modifiers(sentence: str) -> int:
+    return sum(
+        1 for w in sentence.split()
+        if w.lower().rstrip(".,;:!?") in _WEAK_MODIFIERS
+    )
+
+def _sentence_is_runon(sentence: str) -> bool:
+    return sentence.count(",") > 2 and len(sentence.split()) > 25
+
+def _sentence_has_vague_words(sentence: str) -> int:
+    return sum(
+        1 for w in sentence.split()
+        if w.lower().rstrip(".,;:!?") in _VAGUE_WORDS
+    )
+
+def _sentence_has_concrete_details(sentence: str) -> bool:
+    has_number = bool(re.search(r"\d", sentence))
+    has_date = bool(re.search(r"\b(?:19|20)\d{2}\b", sentence))
+    has_percent = bool(re.search(r"\d+\s*%|\d+\s*percent", sentence, re.IGNORECASE))
+    words_in_sent = sentence.split()
+    has_proper = False
+    for i, w in enumerate(words_in_sent):
+        if i == 0:
+            continue
+        clean = w.strip("(),;:.!?\"'")
+        if len(clean) > 1 and clean[0].isupper() and not clean.islower():
+            has_proper = True
+            break
+    return has_number or has_date or has_percent or has_proper
+
+def _sentence_has_evidence(sentence: str) -> list[str]:
+    lower = sentence.lower()
+    flags = []
+    if _CITATION_RE.search(sentence):
+        flags.append("citation")
+    for signal in _EXAMPLE_SIGNALS:
+        if signal in lower:
+            flags.append("example")
+            break
+    for signal in _DATA_SIGNALS:
+        if signal in lower:
+            flags.append("data")
+            break
+    for signal in _EXPERIENCE_SIGNALS:
+        if signal in lower:
+            flags.append("experience")
+            break
+    return flags
+
+
+def _sentence_has_synthesis(sentence: str) -> bool:
+    """Detect literature-review synthesis patterns as evidence."""
+    lower = sentence.lower()
+    synthesis_patterns = (
+        "several studies",
+        "multiple studies",
+        "research generally",
+        "research suggests",
+        "research indicates",
+        "research has found",
+        "research has shown",
+        "literature suggests",
+        "literature indicates",
+        "prior research",
+        "previous research",
+        "existing literature",
+        "the literature",
+        "in contrast to",
+        "in contrast,",
+        "similarly,",
+        "conversely,",
+        "building on",
+        "extending",
+        "consistent with",
+        "in line with",
+        "aligns with",
+        "contradicts",
+        "however,",
+        "nevertheless,",
+        "although",
+        "whereas",
+        "while",
+        "despite",
+        "compared to",
+    )
+    return any(p in lower for p in synthesis_patterns)
+
+
+# Severity weights for sentence-level quality flags (higher = more severe).
+_FLAG_SEVERITY: dict[str, float] = {
+    "runon": 3.0,
+    "passive_voice": 2.0,
+    "no_evidence": 2.0,
+    "no_concrete_details": 1.5,
+    "weak_modifiers": 1.0,
+    "vague_words": 1.0,
+    "synthesis": 0.0,
+    "citation": 0.0,
+    "example": 0.0,
+    "data": 0.0,
+    "experience": 0.0,
+}
+
+
+def _compute_sentence_quality_score(flags: list[str]) -> float:
+    """Return a quality score from 0 (worst) to 10 (best) based on flags."""
+    if not flags:
+        return 10.0
+
+    total_penalty = 0.0
+    for flag in flags:
+        base = flag.split("(")[0]  # strip counts like "weak_modifiers(2)"
+        severity = _FLAG_SEVERITY.get(base, 1.0)
+        # Extract count if present (e.g., "weak_modifiers(2)")
+        count_match = re.search(r"\((\d+)\)", flag)
+        count = int(count_match.group(1)) if count_match else 1
+        total_penalty += severity * count
+
+    score = 10.0 - total_penalty
+    return clamp(score, 0.0, 10.0)
+
+
+def analyze_sentences(sentences: list[str]) -> list[dict]:
+    """Return per-sentence quality flags and a weighted quality score."""
+    results = []
+    for s in sentences:
+        flags = []
+        if _sentence_has_passive(s):
+            flags.append("passive_voice")
+        weak_count = _sentence_has_weak_modifiers(s)
+        if weak_count > 0:
+            flags.append(f"weak_modifiers({weak_count})")
+        if _sentence_is_runon(s):
+            flags.append("runon")
+        vague_count = _sentence_has_vague_words(s)
+        if vague_count > 0:
+            flags.append(f"vague_words({vague_count})")
+        if not _sentence_has_concrete_details(s):
+            flags.append("no_concrete_details")
+        ev_flags = _sentence_has_evidence(s)
+        if not ev_flags and not _sentence_has_synthesis(s):
+            flags.append("no_evidence")
+        else:
+            flags.extend(ev_flags)
+            if _sentence_has_synthesis(s) and "synthesis" not in flags:
+                flags.append("synthesis")
+        score = _compute_sentence_quality_score(flags)
+        results.append({
+            "text": s,
+            "flags": flags,
+            "score": round(score, 1),
+        })
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Top-worst sentences
+# ---------------------------------------------------------------------------
+
+def _score_sentence_quality(sentence: str) -> dict[str, float]:
+    """Return per-dimension quality scores for a single sentence."""
+    words = sentence.split()
+    n_words = len(words)
+
+    # Grammar: lower is worse
+    passive = 1.0 if _sentence_has_passive(sentence) else 0.0
+    weak = _sentence_has_weak_modifiers(sentence) / max(n_words, 1)
+    runon = 1.0 if _sentence_is_runon(sentence) else 0.0
+    grammar_score = 1.0 - (passive + weak + runon) / 3.0
+
+    # Specificity: lower is worse
+    vague = _sentence_has_vague_words(sentence) / max(n_words, 1)
+    abstract = sum(1 for w in words if _is_abstract_noun(w)) / max(n_words, 1)
+    concrete = 1.0 if _sentence_has_concrete_details(sentence) else 0.0
+    specificity_score = (1.0 - vague + 1.0 - abstract + concrete) / 3.0
+
+    # Evidence: higher is better (synthesis counts as evidence)
+    ev_flags = _sentence_has_evidence(sentence)
+    has_synthesis = _sentence_has_synthesis(sentence)
+    evidence_score = 1.0 if (ev_flags or has_synthesis) else 0.0
+
+    # Readability: sentence length as proxy
+    readability_score = 1.0 - min(n_words / 50.0, 1.0)
+
+    return {
+        "grammar": clamp(grammar_score, 0.0, 1.0),
+        "specificity": clamp(specificity_score, 0.0, 1.0),
+        "evidence": evidence_score,
+        "readability": clamp(readability_score, 0.0, 1.0),
+    }
+
+def get_top_worst_sentences(sentences: list[str], dimension: str, top_n: int = 3) -> list[tuple[str, float]]:
+    """Return the top_n worst sentences for a given dimension."""
+    scored = [(s, _score_sentence_quality(s)[dimension]) for s in sentences]
+    scored.sort(key=lambda x: x[1])
+    return scored[:top_n]
+
+
+# ---------------------------------------------------------------------------
+# Paragraph analysis
+# ---------------------------------------------------------------------------
+
+# Regex for cleaning LaTeX/PDF artifacts before paragraph splitting.
+_PAGE_NUMBER_RE = re.compile(r"\n\s*\d+\s*\n")
+_FORM_FEED_RE = re.compile(r"\f")
+_HEADER_FOOTER_RE = re.compile(r"\n\s*Figure\s+\d+:\s*[^\n]*\n", re.IGNORECASE)
+
+
+def _clean_text_for_paragraphs(text: str) -> str:
+    """Strip page numbers, form feeds, and figure captions before splitting."""
+    text = _FORM_FEED_RE.sub("\n", text)
+    text = _PAGE_NUMBER_RE.sub("\n", text)
+    text = _HEADER_FOOTER_RE.sub("\n", text)
+    # Collapse multiple newlines to double-newline (paragraph boundary)
+    text = re.sub(r"\n\s*\n+", "\n\n", text)
+    return text.strip()
+
+
+def split_paragraphs(text: str) -> list[list[str]]:
+    """Split text into paragraphs, each containing its sentences."""
+    text = _clean_text_for_paragraphs(text)
+    paragraphs = []
+    for block in text.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        # Skip short blocks that are likely headers or page numbers
+        if len(block) < 20 and not block.endswith((".", "!", "?")):
+            continue
+        sents = split_sentences(block)
+        if sents:
+            paragraphs.append(sents)
+    return paragraphs
+
+def analyze_paragraphs(text: str) -> dict:
+    """Analyze paragraph structure and flow."""
+    paragraphs = split_paragraphs(text)
+    n_paragraphs = len(paragraphs)
+
+    if n_paragraphs == 0:
+        return {
+            "paragraph_count": 0,
+            "avg_sentences_per_paragraph": 0.0,
+            "paragraph_length_variety": 0.0,
+            "topic_sentence_coverage": 0.0,
+            "paragraph_transition_coverage": 0.0,
+            "thesis_alignment": 0.0,
+        }
+
+    sentence_counts = [len(p) for p in paragraphs]
+    avg_sentences = statistics.mean(sentence_counts)
+
+    if n_paragraphs >= 2:
+        length_variety = clamp(
+            statistics.pstdev(sentence_counts) / max(avg_sentences, 1.0) / 1.0,
+            0.0, 1.0,
+        )
+    else:
+        length_variety = 0.0
+
+    # Topic sentences: first sentence of paragraph should contain a claim
+    # Heuristic: first sentence has a verb and is not a transition/question
+    topic_sentences = 0
+    for p in paragraphs:
+        if not p:
+            continue
+        first = p[0].lower()
+        if first.endswith("?"):
+            continue
+        # Check if it starts with a transition (likely not a topic sentence)
+        first_words_raw = first.split()[:2]
+        first_words = [w.strip(".,;:!?") for w in first_words_raw]
+        first_bigram = " ".join(first_words)
+        if first_bigram in _TRANSITIONS or first_words[0] in _TRANSITIONS:
+            continue
+        # Check if it contains a verb-like claim
+        if re.search(r"\b(?:is|are|was|were|shows|demonstrates|argues|suggests|indicates|found|found that|can|should|will|may|might|could|would)\b", first):
+            topic_sentences += 1
+
+    topic_coverage = topic_sentences / n_paragraphs
+
+    # Paragraph transitions: first sentence of paragraph starts with transition
+    transitions = 0
+    for p in paragraphs:
+        if not p:
+            continue
+        first_raw = p[0].lower().split()[:2]
+        first = [w.strip(".,;:!?") for w in first_raw]
+        first_bigram = " ".join(first)
+        if first_bigram in _TRANSITIONS or first[0] in _TRANSITIONS:
+            transitions += 1
+
+    transition_coverage = transitions / n_paragraphs
+
+    # Thesis alignment: check intro/conclusion keyword overlap
+    intro_words = set()
+    conclusion_words = set()
+    if n_paragraphs >= 2:
+        intro = paragraphs[0]
+        conclusion = paragraphs[-1]
+        intro_words = _prompt_keywords(" ".join(intro))
+        conclusion_words = _prompt_keywords(" ".join(conclusion))
+
+    if intro_words:
+        thesis_alignment = len(intro_words & conclusion_words) / len(intro_words)
+    else:
+        thesis_alignment = 0.0
+
+    return {
+        "paragraph_count": n_paragraphs,
+        "avg_sentences_per_paragraph": avg_sentences,
+        "paragraph_length_variety": length_variety,
+        "topic_sentence_coverage": topic_coverage,
+        "paragraph_transition_coverage": transition_coverage,
+        "thesis_alignment": thesis_alignment,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -433,7 +987,9 @@ def compute_writing_metrics(
     -------
     dict with ``"raw"`` and ``"normalized"`` keys, each containing sub-keys
     for ``readability``, ``lexical_diversity``, ``sentence_variety``,
-    ``repetition``, ``coherence_rubric``, and ``style_consistency``.
+    ``repetition``, ``coherence_rubric``, ``style_consistency``,
+    ``grammar_heuristics``, ``specificity``, and ``evidence``.
+    Additionally includes ``"sentence_analysis"`` and ``"paragraph_analysis"``.
     """
     # --- Preprocessing ---------------------------------------------------
     sentences = split_sentences(candidate)
@@ -513,6 +1069,21 @@ def compute_writing_metrics(
     sig = _compute_signal_flags(sentences, candidate, words, sentvar_raw)
     w_norm = clamp(sig["em_dash_density"] / 20.0, 0.0, 1.0)
 
+    # --- 8. Grammar heuristics -------------------------------------------
+    grammar_raw, grammar_norm = _compute_grammar_heuristics(sentences, words)
+
+    # --- 9. Specificity --------------------------------------------------
+    specificity_raw, specificity_norm = _compute_specificity(sentences, words)
+
+    # --- 10. Evidence -----------------------------------------------------
+    evidence_raw, evidence_norm = _compute_evidence(sentences)
+
+    # --- 11. Sentence-level analysis -------------------------------------
+    sentence_analysis = analyze_sentences(sentences)
+
+    # --- 12. Paragraph analysis ------------------------------------------
+    paragraph_analysis = analyze_paragraphs(candidate)
+
     return {
         "raw": {
             "readability": readability_raw,
@@ -526,6 +1097,9 @@ def compute_writing_metrics(
                 "em_dash_density": sig["em_dash_density"],
                 "fake_burstiness": sig["fake_burstiness"],
             },
+            "grammar_heuristics": grammar_raw,
+            "specificity": specificity_raw,
+            "evidence": evidence_raw,
         },
         "normalized": {
             "readability": readability_norm,
@@ -539,5 +1113,10 @@ def compute_writing_metrics(
                 "em_dash_density": round(w_norm, 4),
                 "fake_burstiness": sig["fake_burstiness"],
             },
+            "grammar_heuristics": grammar_norm,
+            "specificity": specificity_norm,
+            "evidence": evidence_norm,
         },
+        "sentence_analysis": sentence_analysis,
+        "paragraph_analysis": paragraph_analysis,
     }

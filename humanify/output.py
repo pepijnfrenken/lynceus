@@ -61,7 +61,13 @@ def output_json(sentences: list[str], probs: list[float], markers: list[list[str
                 confidence: float | None = None,
                 domain: str | None = None,
                 domain_settings: dict | None = None,
-                domain_warnings: list | None = None) -> None:
+                domain_warnings: list | None = None,
+                quality_metrics: dict | None = None,
+                quality_advice: list[str] | None = None,
+                quality_llm_advice: str | None = None,
+                sentence_analysis: list[dict] | None = None,
+                paragraph_analysis: dict | None = None,
+                top_worst: dict | None = None) -> None:
     """Print machine-readable JSON."""
     tips, focus, all_marks = generate_advice(
         sentences, probs, markers, stats, threshold
@@ -118,6 +124,25 @@ def output_json(sentences: list[str], probs: list[float], markers: list[list[str
                 ],
             }
 
+    if quality_metrics is not None:
+        result["writing_quality"] = {
+            "metrics": quality_metrics,
+            "advice": quality_advice or [],
+            **({"llm_text": quality_llm_advice} if quality_llm_advice else {}),
+        }
+        if sentence_analysis is not None:
+            result["writing_quality"]["sentence_analysis"] = sentence_analysis
+        if paragraph_analysis is not None:
+            result["writing_quality"]["paragraph_analysis"] = paragraph_analysis
+        if top_worst is not None:
+            result["writing_quality"]["top_worst"] = {
+                dim: [
+                    {"text": s, "score": round(score, 4)}
+                    for s, score in items
+                ]
+                for dim, items in top_worst.items()
+            }
+
     print(json.dumps(result, indent=2))
 
 
@@ -132,7 +157,13 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
                 confidence: float | None = None,
                 domain: str | None = None,
                 domain_settings: dict | None = None,
-                domain_warnings: list | None = None) -> None:
+                domain_warnings: list | None = None,
+                quality_metrics: dict | None = None,
+                quality_advice: list[str] | None = None,
+                quality_llm_advice: str | None = None,
+                sentence_analysis: list[dict] | None = None,
+                paragraph_analysis: dict | None = None,
+                top_worst: dict | None = None) -> None:
     """Print color-coded rich output with advice."""
     console = Console()
     body = Text()
@@ -142,7 +173,7 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
         body.append_text(_comparison_table(detector_results, stats))
         body.append(" " + "\u2500" * 44 + "\n\n", style="dim")
 
-    # Sentence-by-sentence analysis
+    # Sentence-by-sentence analysis with quality flags
     for idx, (sent, prob, marks) in enumerate(zip(sentences, probs, markers)):
         color = "green" if prob < 0.3 else ("yellow" if prob < 0.7 else "red")
         icon = "\u2713" if prob < 0.3 else ("\u26a0" if prob < 0.7 else "\u2717")
@@ -162,6 +193,17 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
                 f'   \u2514\u2500 markers: {", ".join(f"{m!r}" for m in marks)}\n',
                 style="dim red",
             )
+        # Sentence-level quality flags
+        if sentence_analysis and idx < len(sentence_analysis):
+            qflags = sentence_analysis[idx].get("flags", [])
+            qscore = sentence_analysis[idx].get("score", 10.0)
+            if qflags or qscore < 10.0:
+                flag_str = ", ".join(qflags) if qflags else "clean"
+                score_color = "green" if qscore >= 8 else ("yellow" if qscore >= 5 else "red")
+                body.append(
+                    f"   \u2514\u2500 quality: [{score_color}]{qscore:.1f}/10[/{score_color}] | {flag_str}\n",
+                    style="dim cyan",
+                )
 
     # Stats summary
     body.append("\n")
@@ -183,6 +225,62 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
     body.append(f' {stats["min"] * 100:.0f}% \u2013 {stats["max"] * 100:.0f}%\n')
     body.append("  Model:      ", style="bold")
     body.append(f"{model_name}\n")
+
+    # Writing quality section
+    if quality_metrics is not None:
+        body.append("\n")
+        body.append(" " + "\u2500" * 44 + "\n", style="dim")
+        body.append(" Writing Quality\n", style="bold cyan")
+        norm = quality_metrics.get("normalized", {})
+        body.append(f"  Grammar:        {norm.get('grammar_heuristics', 0) * 100:.0f}%\n")
+        body.append(f"  Specificity:    {norm.get('specificity', 0) * 100:.0f}%\n")
+        body.append(f"  Evidence:       {norm.get('evidence', 0) * 100:.0f}%\n")
+        body.append(f"  Readability:    {norm.get('readability', 0) * 100:.0f}%\n")
+        body.append(f"  Lexical diversity: {norm.get('lexical_diversity', 0) * 100:.0f}%\n")
+        body.append(f"  Coherence:      {norm.get('coherence_rubric', 0) * 100:.0f}%\n")
+
+        # Paragraph analysis
+        pa = paragraph_analysis or {}
+        if pa:
+            body.append("\n")
+            body.append(" Paragraph Structure\n", style="bold cyan")
+            body.append(f"  Paragraphs:           {pa.get('paragraph_count', 0)}\n")
+            body.append(f"  Avg sentences/para:   {pa.get('avg_sentences_per_paragraph', 0):.1f}\n")
+            body.append(f"  Topic sentences:        {pa.get('topic_sentence_coverage', 0) * 100:.0f}%\n")
+            body.append(f"  Paragraph transitions:  {pa.get('paragraph_transition_coverage', 0) * 100:.0f}%\n")
+            body.append(f"  Thesis alignment:       {pa.get('thesis_alignment', 0) * 100:.0f}%\n")
+
+        body.append("\n")
+        if quality_llm_advice:
+            body.append(" Quality Feedback (AI-generated)\n", style="bold")
+            for line in quality_llm_advice.split("\n"):
+                body.append(f" {line}\n")
+        elif quality_advice:
+            for tip in quality_advice:
+                body.append(
+                    f" {tip}\n",
+                    style="yellow" if tip.startswith("\u26a0") else "green",
+                )
+
+        # Top-worst sentences
+        if top_worst:
+            body.append("\n")
+            body.append(" Top Sentences to Improve\n", style="bold cyan")
+            dim_labels = {
+                "grammar": "Grammar",
+                "specificity": "Specificity",
+                "evidence": "Evidence",
+                "readability": "Readability",
+            }
+            for dim, items in top_worst.items():
+                if not items:
+                    continue
+                label = dim_labels.get(dim, dim)
+                body.append(f"  {label}:\n", style="bold")
+                for s, score in items[:3]:
+                    display = s if len(s) <= 70 else s[:67] + "..."
+                    color = "red" if score < 0.3 else ("yellow" if score < 0.6 else "green")
+                    body.append(f'    \u2022 "{display}"\n', style=color)
 
     # Writing advice section
     tips, focus, _ = generate_advice(sentences, probs, markers, stats, threshold)
@@ -321,4 +419,127 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
     body.append(" Use as one signal among many.\n", style="dim")
     console.print(
         Panel(body, title="[bold]humanify[/bold]", border_style="blue", expand=False)
+    )
+
+
+def _format_val(val: float | None, precision: int = 2, na: str = "\u2014") -> str:
+    """Format a float or None as a short string."""
+    if val is None:
+        return na
+    return f"{val:.{precision}f}"
+
+
+def render_eval_summary(
+    sample_records: list[dict],
+    summary: dict,
+    model_names: list[str],
+    preference_correlation: dict | None = None,
+) -> None:
+    """Render a rich terminal summary of batch eval results to stderr."""
+    console = Console(stderr=True)
+    body = Text()
+
+    # --- Header ---
+    body.append(" Samples: ", style="bold")
+    body.append(f'{summary["sample_count"]} total, ')
+    valid = summary.get("valid_count", 0)
+    invalid = summary.get("invalid_count", 0)
+    body.append(f"{valid} valid", style="green")
+    if invalid:
+        body.append(f", {invalid} invalid", style="red")
+    dup = summary.get("duplicate_id_count", 0)
+    if dup:
+        body.append(f", {dup} duplicate IDs", style="yellow")
+    body.append("\n")
+
+    body.append(" Models:  ", style="bold")
+    body.append(", ".join(model_names))
+    body.append("\n\n")
+
+    # --- Per-sample table ---
+    if sample_records:
+        # Manual fixed-width table
+        header = f"   {'ID':<20s} {'Comp':>6s} {'Pref':>6s} {'Read':>6s} {'Rep':>6s} {'HuDiag':>6s}"
+        sep = f"   {'-'*20} {'-'*6} {'-'*6} {'-'*6} {'-'*6} {'-'*6}"
+        body.append(" Per-Sample Scores\n", style="bold")
+        body.append(f" {header}\n", style="bold cyan")
+        body.append(f" {sep}\n", style="dim")
+
+        for rec in sample_records:
+            cs = rec.get("component_scores", {})
+            cid = rec["id"][:20]
+            comp = rec.get("composite_score")
+            comp_s = _format_val(comp)
+            pref_s = _format_val(cs.get("preference_rubric"))
+            read_s = _format_val(cs.get("readability_style"))
+            rep_s  = _format_val(cs.get("repetition_variety"))
+            hu_s   = _format_val(cs.get("humanify_diagnostic"))
+            row = f"   {cid:<20s} {comp_s:>6s} {pref_s:>6s} {read_s:>6s} {rep_s:>6s} {hu_s:>6s}"
+            if comp is not None:
+                color = "green" if comp >= 0.70 else ("yellow" if comp >= 0.40 else "red")
+                body.append(row + "\n", style=color)
+            else:
+                body.append(row + "\n")
+        body.append("\n")
+    # --- Aggregate stats ---
+    comps = [r.get("composite_score") for r in sample_records
+             if r.get("composite_score") is not None]
+    if comps:
+        mn = sum(comps) / len(comps)
+        variance = sum((x - mn) ** 2 for x in comps) / len(comps)
+        sd = variance ** 0.5
+        body.append(" Aggregates:\n", style="bold")
+        body.append(f"   Composite: {min(comps):.2f}\u2013{max(comps):.2f} ")
+        body.append(f"(\u03bc={mn:.2f}, \u03c3={sd:.2f})\n")
+
+    # --- Quality aggregate stats ---
+    quality_keys = [
+        ("grammar_heuristics", "Grammar"),
+        ("specificity", "Specificity"),
+        ("evidence", "Evidence"),
+        ("readability", "Readability"),
+        ("lexical_diversity", "Lexical diversity"),
+        ("coherence_rubric", "Coherence"),
+    ]
+    quality_avgs: dict[str, list[float]] = {}
+    for rec in sample_records:
+        norm = rec.get("metrics", {}).get("normalized", {})
+        for key, _ in quality_keys:
+            val = norm.get(key)
+            if val is not None:
+                quality_avgs.setdefault(key, []).append(val)
+    if quality_avgs:
+        body.append("\n Quality Averages:\n", style="bold")
+        for key, label in quality_keys:
+            vals = quality_avgs.get(key, [])
+            if vals:
+                avg = sum(vals) / len(vals)
+                color = "green" if avg >= 0.7 else ("yellow" if avg >= 0.4 else "red")
+                body.append(f"   {label:<18s} ", style="bold")
+                body.append(f"[{color}]{avg * 100:.0f}%[/{color}]\n")
+
+    # --- Preference correlation ---
+    corr = preference_correlation or summary.get("preference_correlation", {})
+    pair_count = corr.get("pair_count", 0)
+    if pair_count > 0:
+        body.append("\n Preference Correlation", style="bold")
+        body.append(f" ({pair_count} pairs):\n")
+        non_tie = corr.get("non_tie_count", 0)
+        tie = corr.get("tie_count", 0)
+        body.append(f"   Non-tie: {non_tie}, Ties: {tie}\n")
+        agreement = corr.get("agreement")
+        if agreement is not None:
+            body.append(f"   Agreement: {agreement * 100:.1f}%    ")
+        pearson = corr.get("pearson")
+        if pearson is not None:
+            p_color = "green" if pearson > 0.7 else ("yellow" if pearson > 0.4 else "red")
+            body.append(f"Pearson: [{p_color}]{pearson:.3f}[/{p_color}]    ")
+        spearman = corr.get("spearman")
+        if spearman is not None:
+            s_color = "green" if spearman > 0.7 else ("yellow" if spearman > 0.4 else "red")
+            body.append(f"Spearman: [{s_color}]{spearman:.3f}[/{s_color}]")
+        body.append("\n")
+
+    console.print(
+        Panel(body, title="[bold]humanify eval[/bold]", border_style="blue", expand=False)
     )

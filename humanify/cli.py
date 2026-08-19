@@ -11,6 +11,7 @@ from .analysis import (
     ScoringUnit,
     find_markers,
     find_markers_weighted,
+    generate_quality_advice,
     prepare_scoring_units,
     read_input,
     _AI_WEIGHTS,
@@ -20,6 +21,7 @@ from .structure import audit_structure
 from .detectors import DETECTORS, get_detector
 from .detectors.base import _ensure_pad_token
 from .output import output_json, output_rich
+from .writing_metrics import compute_writing_metrics
 import os
 
 
@@ -383,6 +385,17 @@ def _main_single(argv: list[str] | None = None) -> int:
                             "academic, social, legal. Adjusts thresholds and "
                             "adds false-positive warnings."
                         ))
+    parser.add_argument("--prompt", type=str, default=None,
+                        help=(
+                            "Original writing prompt (improves keyword-coverage "
+                            "and coherence scoring)"
+                        ))
+    parser.add_argument("--style", type=str, default="general",
+                        choices=["general", "academic"],
+                        help=(
+                            "Writing style calibration: general (default) or "
+                            "academic (shifts thresholds for formal prose)"
+                        ))
     args = parser.parse_args(argv)
 
     # Read and prepare input. Detectors score normalized document-like chunks;
@@ -424,12 +437,28 @@ def _main_single(argv: list[str] | None = None) -> int:
     model_label = result["model_label"]
     detector_results = result["detector_results"]
 
+# Writing quality metrics (deterministic)
+    quality_metrics = compute_writing_metrics(
+        args.prompt or raw, raw
+    )
+    quality_advice = generate_quality_advice(quality_metrics, style=args.style)
+
+    # Extract sentence analysis and top-worst sentences
+    sentence_analysis = quality_metrics.get("sentence_analysis", [])
+    paragraph_analysis = quality_metrics.get("paragraph_analysis", {})
+    from .writing_metrics import get_top_worst_sentences
+    top_worst = {
+        dim: get_top_worst_sentences(sentences, dim, top_n=3)
+        for dim in ("grammar", "specificity", "evidence", "readability")
+    }
+
     # LLM-gated layers: "llm" advice and "narrative" checklist. Both reuse the
     # detector's causal LM when available, else load Qwen3.5-0.8B-Base. The
     # narrative checklist is gated at 500+ words and NEVER loads a model for
     # short input (KB: narrative features need long text; short scores are
     # noise).
     llm_advice = None
+    quality_llm_advice = None
     narrative = None
     if args.advice in ("llm", "narrative"):
         short_narrative = args.advice == "narrative" and (
@@ -448,9 +477,6 @@ def _main_single(argv: list[str] | None = None) -> int:
                 _pad_token_id,
                 _strip_think_blocks,
             )
-            if args.advice == "llm":
-                from .advice_llm import generate_llm_advice
-
             causal_lm = None
             for r in detector_results:
                 causal_lm = r["detector"].get_causal_lm()
@@ -497,8 +523,14 @@ def _main_single(argv: list[str] | None = None) -> int:
                 return _strip_think_blocks(text)
 
             if args.advice == "llm":
+                from .advice_llm import generate_llm_advice, generate_quality_llm_advice
+
                 llm_advice = generate_llm_advice(
                     *causal_lm, sentences, probs, markers, stats, args.threshold
+                )
+                quality_llm_advice = generate_quality_llm_advice(
+                    *causal_lm,
+                    quality_metrics,
                 )
             else:  # narrative
                 from .narrative_checklist import run_narrative_checklist
@@ -534,11 +566,37 @@ def _main_single(argv: list[str] | None = None) -> int:
         domain_warnings=domain_warnings,
     )
     if args.json:
-        output_json(sentences, probs, markers, stats, args.threshold, model_label,
-                    **_shared)
+        output_json(
+            sentences,
+            probs,
+            markers,
+            stats,
+            args.threshold,
+            model_label,
+            quality_metrics=quality_metrics,
+            quality_advice=quality_advice,
+            quality_llm_advice=quality_llm_advice,
+            sentence_analysis=sentence_analysis,
+            paragraph_analysis=paragraph_analysis,
+            top_worst=top_worst,
+            **_shared,
+        )
     else:
-        output_rich(sentences, probs, markers, stats, args.threshold, model_label,
-                    **_shared)
+        output_rich(
+            sentences,
+            probs,
+            markers,
+            stats,
+            args.threshold,
+            model_label,
+            quality_metrics=quality_metrics,
+            quality_advice=quality_advice,
+            quality_llm_advice=quality_llm_advice,
+            sentence_analysis=sentence_analysis,
+            paragraph_analysis=paragraph_analysis,
+            top_worst=top_worst,
+            **_shared,
+        )
 
     # Some transformer/PyTorch builds can deadlock during interpreter cleanup
     # after successful CPU inference. Flush the rendered result and skip object

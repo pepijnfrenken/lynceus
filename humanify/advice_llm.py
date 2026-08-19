@@ -155,3 +155,92 @@ def generate_llm_advice(
     text = _strip_think_blocks(text)
 
     return text
+
+
+def _build_quality_prompt(metrics: dict) -> str:
+    """Format quality metrics into a structured prompt for the LLM."""
+    norm = metrics.get("normalized", {})
+    raw = metrics.get("raw", {})
+
+    def _pct(key: str) -> str:
+        val = norm.get(key)
+        if val is None:
+            return "N/A"
+        return f"{val * 100:.0f}%"
+
+    def _raw_val(path: str) -> str:
+        keys = path.split(".")
+        d = raw
+        for k in keys:
+            d = d.get(k, {}) if isinstance(d, dict) else {}
+        if isinstance(d, float):
+            return f"{d * 100:.0f}%" if d <= 1 else f"{d:.2f}"
+        return str(d) if d else "N/A"
+
+    lines = [
+        "You are a writing coach. Based on these essay quality metrics,",
+        "identify 2\u20133 specific strengths and 2\u20133 concrete weaknesses.",
+        "For each weakness, explain exactly what to change and why.",
+        "Be concise, direct, and specific to the numbers below.\n",
+        "Quality Metrics:",
+        f"- Grammar (active voice, weak modifiers, run-ons): {_pct('grammar_heuristics')}",
+        f"  - Passive voice: {_raw_val('grammar_heuristics.passive_ratio')}",
+        f"  - Weak modifiers: {_raw_val('grammar_heuristics.weak_modifier_ratio')}",
+        f"  - Run-on risk: {_raw_val('grammar_heuristics.runon_ratio')}",
+        f"- Specificity (concrete details vs vague/abstract): {_pct('specificity')}",
+        f"  - Vague words: {_raw_val('specificity.vague_word_ratio')}",
+        f"  - Abstract nouns: {_raw_val('specificity.abstract_noun_ratio')}",
+        f"  - Concrete details: {_raw_val('specificity.concrete_detail_ratio')}",
+        f"- Evidence (citations, examples, data, experience): {_pct('evidence')}",
+        f"  - Citations: {_raw_val('evidence.citation_density')}",
+        f"  - Examples: {_raw_val('evidence.example_density')}",
+        f"  - Data signals: {_raw_val('evidence.data_density')}",
+        f"  - Experience: {_raw_val('evidence.experience_density')}",
+        f"- Readability: {_pct('readability')}",
+        f"- Lexical diversity: {_pct('lexical_diversity')}",
+        f"- Sentence variety: {_pct('sentence_variety')}",
+        f"- Repetition: {_pct('repetition')}",
+        f"- Coherence: {_pct('coherence_rubric')}",
+        f"- Style consistency: {_pct('style_consistency')}",
+        "\nGive concise, direct advice. Be specific to this text.",
+    ]
+    return "\n".join(lines)
+
+
+def generate_quality_llm_advice(
+    model: Any,
+    tokenizer: Any,
+    device: str,
+    metrics: dict,
+) -> str:
+    """Generate quality-coach advice using a causal LM.
+
+    Args:
+        model: Loaded causal LM (AutoModelForCausalLM).
+        tokenizer: Corresponding tokenizer.
+        device: torch device string.
+        metrics: Dict returned by ``compute_writing_metrics()``.
+
+    Returns:
+        Generated advice as a plain string.
+    """
+    prompt = _build_quality_prompt(metrics)
+    formatted_prompt = _format_generation_prompt(tokenizer, prompt)
+
+    inputs = tokenizer(
+        formatted_prompt, return_tensors="pt", truncation=True,
+        max_length=1024, return_token_type_ids=False,
+    ).to(device)
+
+    with torch.no_grad():
+        output_ids = model.generate(
+            **inputs,
+            max_new_tokens=350,
+            do_sample=False,
+            pad_token_id=_pad_token_id(tokenizer),
+        )
+
+    generated = output_ids[0][inputs["input_ids"].shape[1]:]
+    text = tokenizer.decode(generated, skip_special_tokens=True).strip()
+    text = _strip_think_blocks(text)
+    return text

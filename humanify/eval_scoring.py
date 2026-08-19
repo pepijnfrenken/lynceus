@@ -118,11 +118,13 @@ def component_scores(
 
     # --- Preference rubric (weighted composite of all normalized metrics) ---
     _preference_weights: dict[str, float] = {
-        "coherence_rubric": 0.45,
-        "style_consistency": 0.25,
-        "readability": 0.15,
-        "lexical_diversity": 0.10,
+        "coherence_rubric": 0.40,
+        "style_consistency": 0.20,
+        "readability": 0.10,
+        "lexical_diversity": 0.05,
         "repetition": 0.05,
+        "specificity": 0.10,
+        "evidence": 0.10,
     }
 
     weighted_sum = 0.0
@@ -137,12 +139,13 @@ def component_scores(
         weighted_sum / weight_sum if weight_sum > 0 else None
     )
 
-    # --- Readability-Style (simple mean) ---
+    # --- Readability-Style ---
     readability_style = safe_mean(
         [
             norm.get("readability"),
             norm.get("lexical_diversity"),
             norm.get("style_consistency"),
+            norm.get("grammar_heuristics"),
         ]
     )
 

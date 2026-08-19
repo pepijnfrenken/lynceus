@@ -24,6 +24,9 @@ FAKE_NORMALIZED = {
     "repetition": 0.8,
     "coherence_rubric": 0.65,
     "style_consistency": 0.9,
+    "grammar_heuristics": 0.75,
+    "specificity": 0.55,
+    "evidence": 0.40,
 }
 
 FAKE_RAW = {
@@ -38,6 +41,22 @@ FAKE_RAW = {
         "reference_overlap": None,
     },
     "style_consistency": {"terminal_punctuation": 0.9, "casing": 1.0},
+    "grammar_heuristics": {
+        "passive_ratio": 0.1,
+        "weak_modifier_ratio": 0.05,
+        "runon_ratio": 0.0,
+    },
+    "specificity": {
+        "vague_word_ratio": 0.04,
+        "abstract_noun_ratio": 0.12,
+        "concrete_detail_ratio": 0.4,
+    },
+    "evidence": {
+        "citation_density": 0.1,
+        "example_density": 0.1,
+        "data_density": 0.1,
+        "experience_density": 0.0,
+    },
 }
 
 FAKE_METRICS = {"raw": FAKE_RAW, "normalized": FAKE_NORMALIZED}
@@ -190,6 +209,22 @@ class EvaluatorTest(unittest.TestCase):
                 self.assertIsNotNone(cs, f"sample {rec['id']} missing composite_score")
                 self.assertGreaterEqual(cs, 0.0)
                 self.assertLessEqual(cs, 1.0)
+
+    def test_eval_new_metric_keys_present(self):
+        """Sample records include grammar, specificity, and evidence metrics."""
+        ret, out, err = self._run_patched()
+        self.assertEqual(ret, 0, msg=err)
+        records = [json.loads(line) for line in out.strip().split("\n")]
+        for rec in records:
+            if rec["type"] == "sample":
+                norm = rec["metrics"]["normalized"]
+                raw = rec["metrics"]["raw"]
+                self.assertIn("grammar_heuristics", norm)
+                self.assertIn("grammar_heuristics", raw)
+                self.assertIn("specificity", norm)
+                self.assertIn("specificity", raw)
+                self.assertIn("evidence", norm)
+                self.assertIn("evidence", raw)
 
     def test_eval_output_contains_no_advice_or_evasion_phrasing(self):
         """Output must not contain forbidden advice/evasion words."""
