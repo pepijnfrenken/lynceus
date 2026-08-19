@@ -1,0 +1,390 @@
+{
+  "name": "spectrum_cross_detector",
+  "meta": {
+    "n": 24,
+    "classes": [
+      "human",
+      "light_edit",
+      "heavy_edit",
+      "ai_gen"
+    ],
+    "n_per_class": {
+      "human": 6,
+      "light_edit": 6,
+      "heavy_edit": 6,
+      "ai_gen": 6
+    },
+    "note": "Curated spectrum: human voice originals, light AI polish, heavy AI rewrite, and fully AI-generated. EditLens scores edit magnitude 0-1 (4 buckets); others score AI probability."
+  },
+  "detectors": {
+    "tmr": {
+      "auroc": 0.7546,
+      "tpr_at_5_%_fpr": 0.4444,
+      "macro_f1": 0.5214
+    },
+    "desklib": {
+      "auroc": 0.7546,
+      "tpr_at_5_%_fpr": 0.5556,
+      "macro_f1": 0.5556
+    },
+    "fast-detect": {
+      "auroc": 0.6713,
+      "tpr_at_5_%_fpr": 0.2778,
+      "macro_f1": 0.5209
+    },
+    "binoculars(degen)": {
+      "auroc": 0.6713,
+      "tpr_at_5_%_fpr": 0.2778,
+      "macro_f1": 0.5209
+    },
+    "editlens": {
+      "auroc": 0.6898,
+      "tpr_at_5_%_fpr": 0.2778,
+      "macro_f1": 0.5819
+    },
+    "radar": {
+      "auroc": 0.7639,
+      "tpr_at_5_%_fpr": 0.5,
+      "macro_f1": 0.4286
+    }
+  },
+  "per_class_mean": {
+    "tmr": {
+      "human": {
+        "mean": 0.7278,
+        "scores": [
+          0.983,
+          0.879,
+          0.801,
+          0.68,
+          0.941,
+          0.083
+        ]
+      },
+      "light_edit": {
+        "mean": 0.721,
+        "scores": [
+          0.983,
+          0.891,
+          0.801,
+          0.622,
+          0.903,
+          0.126
+        ]
+      },
+      "heavy_edit": {
+        "mean": 0.8928,
+        "scores": [
+          0.987,
+          0.981,
+          0.445,
+          0.979,
+          0.982,
+          0.984
+        ]
+      },
+      "ai_gen": {
+        "mean": 0.9865,
+        "scores": [
+          0.987,
+          0.986,
+          0.986,
+          0.987,
+          0.986,
+          0.986
+        ]
+      }
+    },
+    "desklib": {
+      "human": {
+        "mean": 0.527,
+        "scores": [
+          0.582,
+          0.193,
+          0.439,
+          0.504,
+          0.778,
+          0.666
+        ]
+      },
+      "light_edit": {
+        "mean": 0.5176,
+        "scores": [
+          0.547,
+          0.215,
+          0.439,
+          0.419,
+          0.77,
+          0.716
+        ]
+      },
+      "heavy_edit": {
+        "mean": 0.7963,
+        "scores": [
+          0.997,
+          0.769,
+          0.165,
+          0.998,
+          0.85,
+          0.998
+        ]
+      },
+      "ai_gen": {
+        "mean": 1.0,
+        "scores": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "fast-detect": {
+      "human": {
+        "mean": 0.3495,
+        "scores": [
+          0.553,
+          0.125,
+          0.16,
+          0.469,
+          0.642,
+          0.149
+        ]
+      },
+      "light_edit": {
+        "mean": 0.3775,
+        "scores": [
+          0.5,
+          0.162,
+          0.16,
+          0.546,
+          0.709,
+          0.187
+        ]
+      },
+      "heavy_edit": {
+        "mean": 0.3381,
+        "scores": [
+          0.44,
+          0.439,
+          0.213,
+          0.208,
+          0.369,
+          0.358
+        ]
+      },
+      "ai_gen": {
+        "mean": 0.7133,
+        "scores": [
+          0.509,
+          0.853,
+          0.93,
+          0.793,
+          0.665,
+          0.529
+        ]
+      }
+    },
+    "binoculars(degen)": {
+      "human": {
+        "mean": 0.3505,
+        "scores": [
+          0.549,
+          0.124,
+          0.185,
+          0.461,
+          0.651,
+          0.133
+        ]
+      },
+      "light_edit": {
+        "mean": 0.3782,
+        "scores": [
+          0.5,
+          0.152,
+          0.185,
+          0.549,
+          0.711,
+          0.173
+        ]
+      },
+      "heavy_edit": {
+        "mean": 0.3396,
+        "scores": [
+          0.442,
+          0.461,
+          0.223,
+          0.197,
+          0.367,
+          0.349
+        ]
+      },
+      "ai_gen": {
+        "mean": 0.7288,
+        "scores": [
+          0.5,
+          0.88,
+          0.937,
+          0.803,
+          0.694,
+          0.558
+        ]
+      }
+    },
+    "editlens": {
+      "human": {
+        "mean": 0.8194,
+        "scores": [
+          1.0,
+          0.727,
+          0.971,
+          0.999,
+          0.999,
+          0.22
+        ]
+      },
+      "light_edit": {
+        "mean": 0.945,
+        "scores": [
+          1.0,
+          0.99,
+          0.971,
+          0.999,
+          0.999,
+          0.71
+        ]
+      },
+      "heavy_edit": {
+        "mean": 0.987,
+        "scores": [
+          1.0,
+          0.999,
+          0.996,
+          0.999,
+          0.928,
+          0.999
+        ]
+      },
+      "ai_gen": {
+        "mean": 0.9899,
+        "scores": [
+          1.0,
+          1.0,
+          0.942,
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "radar": {
+      "human": {
+        "mean": 0.6755,
+        "scores": [
+          0.719,
+          0.729,
+          0.588,
+          0.695,
+          0.694,
+          0.628
+        ]
+      },
+      "light_edit": {
+        "mean": 0.6805,
+        "scores": [
+          0.737,
+          0.734,
+          0.588,
+          0.7,
+          0.704,
+          0.621
+        ]
+      },
+      "heavy_edit": {
+        "mean": 0.7295,
+        "scores": [
+          0.803,
+          0.798,
+          0.644,
+          0.715,
+          0.7,
+          0.718
+        ]
+      },
+      "ai_gen": {
+        "mean": 0.755,
+        "scores": [
+          0.743,
+          0.749,
+          0.746,
+          0.814,
+          0.754,
+          0.724
+        ]
+      }
+    }
+  },
+  "editlens_extra": {
+    "editlens": {
+      "buckets": [
+        "human",
+        "light_edit",
+        "heavy_edit",
+        "ai_gen"
+      ],
+      "per_class_mean": {
+        "human": {
+          "mean": 0.8194,
+          "scores": [
+            1.0,
+            0.727,
+            0.971,
+            0.999,
+            0.999,
+            0.22
+          ]
+        },
+        "light_edit": {
+          "mean": 0.945,
+          "scores": [
+            1.0,
+            0.99,
+            0.971,
+            0.999,
+            0.999,
+            0.71
+          ]
+        },
+        "heavy_edit": {
+          "mean": 0.987,
+          "scores": [
+            1.0,
+            0.999,
+            0.996,
+            0.999,
+            0.928,
+            0.999
+          ]
+        },
+        "ai_gen": {
+          "mean": 0.9899,
+          "scores": [
+            1.0,
+            1.0,
+            0.942,
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    }
+  },
+  "ensemble": {
+    "auroc": 0.7454,
+    "tpr_at_5_%_fpr": 0.3889,
+    "macro_f1": 0.6211
+  }
+}
