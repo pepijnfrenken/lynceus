@@ -16,6 +16,10 @@ htmlcov/
 # Project planning artifacts (OMP)
 .omo/
 
+# redteam loop run outputs (written by redteam/loop.py by default)
+redteam/logs/*.jsonl
+redteam/logs/best_text.txt
+
 # Virtual environments
 .venv
 test.txt
