@@ -7,6 +7,7 @@ from .fast_detect import FastDetectDetector
 from .binoculars import BinocularsDetector
 from .editlens import EditLensDetector
 from .radar import RadarDetector
+from .meld import MeldDetector
 
 DETECTORS: dict[str, type[Detector]] = {
     "tmr": TMRDetector,
@@ -15,6 +16,7 @@ DETECTORS: dict[str, type[Detector]] = {
     "binoculars": BinocularsDetector,
     "editlens": EditLensDetector,
     "radar": RadarDetector,
+    "meld": MeldDetector,
 }
 
 

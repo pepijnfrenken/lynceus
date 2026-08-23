@@ -148,7 +148,7 @@ options:
   --json, -j            Output machine-readable JSON
   --model, -m MODEL     Detection method (default: tmr). Comma-separate for
                         ensemble: tmr,fast-detect. Available: tmr, desklib,
-                        fast-detect, binoculars, editlens, radar
+                        fast-detect, binoculars, editlens, radar, meld
   --model-id MODEL_ID   Override default model ID. For binoculars:
                         'observer,performer'
   --threshold, -t THRESHOLD
@@ -191,8 +191,11 @@ The `eval` subcommand provides batch metrics-only evaluation. It accepts a JSONL
 | `binoculars` | `Qwen/Qwen3.5-0.8B-Base,Qwen/Qwen3.5-0.8B-Base` | Binoculars-style perplexity ratio | Perplexity-ratio review | Loads two causal LMs; highest memory use among defaults. **Default pair is degenerate** (see note). |
 | `editlens` | `pangram/editlens_roberta-large` | AI-edit-magnitude classifier | Text that looks post-processed / paraphrased | CC BY-NC-SA, contact-gated on HF. A separate *edit* axis (0-1) shown apart from authorship probability, never blended into the mean ensemble. |
 | `radar` | `TrustSafeAI/RADAR-Vicuna-7B` | Paraphrase-robust classifier | Text that has already been reworded by a humanizer | Non-commercial license. The one classifier family that stays strong after a paraphrase attack (AUROC ≈ 0.92 post-attack). |
+| `meld` | `anon-review-meld-2026/meld` | Custom anchor/prototype classifier (Ettin-400m BiLM + style-space metric head) | Strongest open-source detector on RAID (arXiv 2605.06903) | 395M params, MIT license. Needs ≥ 100 words (see note). The scoring head is custom — `AutoModel`/`pipeline()` silently discard its weights, so the checkpoint loads with `strict=True`. |
 
 > **Binoculars default caveat.** The shipped `binoculars` default uses the *same* model (`Qwen/Qwen3.5-0.8B-Base`) for both observer and performer roles — cross-perplexity between identical models collapses to plain perplexity. Pass `--model-id observer-model,performer-model` with two different close models for a real Binoculars-style ratio; otherwise read the default as a plain-perplexity signal.
+
+> **MELD usage notes.** MELD needs **≥ 100 words** to be reliable — below ~50 words it flags most genuine human writing, so `humanify` blends short readings toward neutral 0.5 (same policy as RADAR). It reads the first **2048 tokens** (`max_length`) of a document; humanify's 320-word scoring units stay well under that cap, and longer documents are scored unit-by-unit and aggregated. **Threshold guidance:** for a 1%-FPR flag, compare MELD's *raw* score against the checkpoint's `score_offsets.overall.fpr_0.01` (per-stratum offsets in `score_offsets.strata`) — do not use P(AI) ≈ 0.5, since MELD's P(AI) is not calibrated to 0.5 (genuine human prose averages ≈ 0.2). The detector keeps the raw per-unit scores and threshold available in Python (`detector.last_raw_scores`, `detector.threshold`, `detector.flag_units()`); the CLI JSON output reports the calibrated P(AI) like every other detector. Keep original line breaks — re-flowing paragraphs shifts the score. Weights go to the Hugging Face cache; set `HUMANIFY_MELD_DIR` to a local checkpoint directory (containing `meld_config.json` + `model.safetensors`) as a fallback.
 
 ### Choosing a detector
 
@@ -200,6 +203,7 @@ The `eval` subcommand provides batch metrics-only evaluation. It accepts a JSONL
 - Use `desklib` when you can afford a larger classifier and want a stronger single-model signal.
 - Use `fast-detect` when you want a zero-shot detector based on causal-LM likelihood behavior.
 - Use `binoculars` when you specifically want a perplexity-ratio method and have enough memory for two LMs.
+- Use `meld` when you want the strongest open-source detector on RAID (395M params; needs ≥ 100 words and the first download is ~1.6 GB).
 - Use an ensemble when disagreement between methods is useful for review:
 
 ```bash

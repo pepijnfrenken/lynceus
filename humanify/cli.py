@@ -120,12 +120,13 @@ NARRATIVE_MAX_PROMPT_TOKENS = 4096  # tokenizer truncation for the checklist pro
 def _axis_name(name: str) -> str | None:
     """Map a detector name to its per-layer ensemble axis (Task C, Phase 6.1).
 
-    * ``classifier_axis`` -- TMR / Desklib / Radar / EditLens (supervised
-      classifiers; EditLens is edit-magnitude, included here but documented).
+    * ``classifier_axis`` -- TMR / Desklib / Radar / EditLens / MELD
+      (supervised classifiers; EditLens is edit-magnitude, included here but
+      documented; MELD is the RAID #1 open-source detector).
     * ``zero_shot_axis``  -- Fast-DetectGPT (+ Binoculars if non-degenerate).
     Returns ``None`` for detectors outside the ensemble axes.
     """
-    if name in ("tmr", "desklib", "radar", "editlens"):
+    if name in ("tmr", "desklib", "radar", "editlens", "meld"):
         return "classifier_axis"
     if name in ("fast-detect", "binoculars"):
         return "zero_shot_axis"
@@ -238,7 +239,7 @@ def _ensemble_axes(
         "axis_agreement": round(axis_agreement, 4),
         "exclusions": axis_exclusions,
         "axis_definitions": {
-            "classifier_axis": "TMR/Desklib/RADAR/EditLens mean (EditLens = edit-magnitude, included here but orthogonal to authorship)",
+            "classifier_axis": "TMR/Desklib/RADAR/EditLens/MELD mean (EditLens = edit-magnitude, included here but orthogonal to authorship)",
             "zero_shot_axis": "Fast-DetectGPT (+ Binoculars if non-degenerate)",
             "lexical_axis": "normalized era-aware marker density (mean matched weight / max possible)",
             "structural_axis": "structure_audit score (T2/T3/T5)",
