@@ -1,5 +1,5 @@
 [project]
-name = "humanify"
+name = "lynceus"
 version = "0.2.0"
 description = "AI text pattern analyzer suite with pluggable detection methods"
 readme = "README.md"
@@ -19,7 +19,7 @@ classifiers = [
 ]
 
 [project.scripts]
-humanify = "humanify.cli:main"
+lynceus = "lynceus.cli:main"
 
 [build-system]
 requires = ["hatchling"]

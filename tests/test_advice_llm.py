@@ -1,6 +1,6 @@
 import unittest
 
-from humanify.advice_llm import (
+from lynceus.advice_llm import (
     _format_generation_prompt,
     _pad_token_id,
     _strip_think_blocks,

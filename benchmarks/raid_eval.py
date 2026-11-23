@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RAID robustness eval for humanify detectors.
+"""RAID robustness eval for lynceus detectors.
 
 Loads the RAID test split from ``benchmarks/data/raid/`` (``*.jsonl`` files
 with human_text/ai_text rows), runs each detector plus the mean-prob ensemble,
@@ -51,7 +51,7 @@ def run_harness(texts, labels, detector_specs, batch_size=16):
 def main(argv=None):
     parser = C.add_eval_args(
         "benchmarks/raid_eval.py",
-        "RAID (reference) robustness eval for humanify detectors.",
+        "RAID (reference) robustness eval for lynceus detectors.",
         default_data_dir="benchmarks/data/raid",
         out_name="raid1",
     )

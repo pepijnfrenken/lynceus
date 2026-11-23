@@ -1,8 +1,8 @@
-"""Tests for humanify.structure -- structural audit (Task F, Phase 3.4)."""
+"""Tests for lynceus.structure -- structural audit (Task F, Phase 3.4)."""
 
 import unittest
 
-from humanify.structure import audit_structure
+from lynceus.structure import audit_structure
 
 
 class StructureAuditTest(unittest.TestCase):

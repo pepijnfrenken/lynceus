@@ -3,7 +3,7 @@
 No weights are downloaded here: the Ettin backbone is faked via
 ``AutoModel.from_config``, checkpoint loading is bypassed (``load_state_dict``
 no-op'd), and the hub is never touched (``snapshot_download`` is asserted
-against in tests that exercise ``HUMANIFY_MELD_DIR``). The custom scoring head
+against in tests that exercise ``LYNCEUS_MELD_DIR``). The custom scoring head
 (style projection, anchor/prototype distances, top-rho aggregation) runs real
 torch math on the fake backbone, so determinism, bounds, calibration, and
 flagging all exercise the actual head code.
@@ -17,8 +17,8 @@ from unittest.mock import patch
 
 import torch
 
-from humanify.detectors import DETECTORS
-from humanify.detectors.meld import (
+from lynceus.detectors import DETECTORS
+from lynceus.detectors.meld import (
     Meld,
     MeldDetector,
     _calibrate_short_text,
@@ -103,17 +103,17 @@ def _make_meld_detector(tmpdir, **cfg_overrides):
     """Build a loaded MeldDetector over a fake checkpoint, no downloads."""
     model_dir = _write_fake_checkpoint(tmpdir, **cfg_overrides)
     det = MeldDetector()
-    with patch("humanify.detectors.meld.AutoConfig.from_pretrained",
+    with patch("lynceus.detectors.meld.AutoConfig.from_pretrained",
                return_value=None), \
-         patch("humanify.detectors.meld.AutoModel.from_config",
+         patch("lynceus.detectors.meld.AutoModel.from_config",
                return_value=FakeBackbone()), \
          patch.object(Meld, "load_state_dict", return_value=None), \
-         patch("humanify.detectors.meld.load_file", return_value={}), \
-         patch("humanify.detectors.meld.AutoTokenizer.from_pretrained",
+         patch("lynceus.detectors.meld.load_file", return_value={}), \
+         patch("lynceus.detectors.meld.AutoTokenizer.from_pretrained",
                return_value=FakeMeldTokenizer()), \
-         patch("humanify.detectors.meld.snapshot_download",
+         patch("lynceus.detectors.meld.snapshot_download",
                side_effect=AssertionError("tests must not download weights")), \
-         patch.dict(os.environ, {"HUMANIFY_MELD_DIR": model_dir}):
+         patch.dict(os.environ, {"LYNCEUS_MELD_DIR": model_dir}):
         det.load("cpu", fp16=False)
     return det
 
@@ -216,8 +216,8 @@ class MeldFlaggingTest(unittest.TestCase):
 
 class MeldScoringUnitsConventionTest(unittest.TestCase):
     def test_units_chunking_and_expansion_match_harness(self):
-        from humanify.analysis import prepare_scoring_units
-        from humanify.cli import _expand_unit_scores
+        from lynceus.analysis import prepare_scoring_units
+        from lynceus.cli import _expand_unit_scores
 
         raw = " ".join(f"sentence number {i} with a few ordinary words." for i in range(60))
         sentences, units = prepare_scoring_units(raw)
@@ -243,9 +243,9 @@ class MeldScoringUnitsConventionTest(unittest.TestCase):
 
 class MeldCliTest(unittest.TestCase):
     def test_cli_accepts_meld_model(self):
-        from humanify.cli import _load_detectors
+        from lynceus.cli import _load_detectors
 
-        with patch("humanify.detectors.meld.MeldDetector.load") as fake_load:
+        with patch("lynceus.detectors.meld.MeldDetector.load") as fake_load:
             loaded = _load_detectors(
                 ["meld"], model_id=None, device_name="cpu", suppress_stdout=True
             )
@@ -254,7 +254,7 @@ class MeldCliTest(unittest.TestCase):
         self.assertEqual(loaded[0]["model_id"], "anon-review-meld-2026/meld")
 
     def test_cli_unknown_model_still_rejected(self):
-        from humanify.cli import _load_detectors
+        from lynceus.cli import _load_detectors
 
         with self.assertRaises(ValueError):
             _load_detectors(["meld-typo"], model_id=None, device_name="cpu")
@@ -262,7 +262,7 @@ class MeldCliTest(unittest.TestCase):
 
 class MeldAxisWiringTest(unittest.TestCase):
     def test_meld_maps_to_classifier_axis(self):
-        from humanify.cli import _axis_name
+        from lynceus.cli import _axis_name
 
         # A supervised classifier-style scorer; excluding it from the axis
         # would silently leave the per-layer "overall" disagreeing with the

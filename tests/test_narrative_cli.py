@@ -11,8 +11,8 @@ import json
 import unittest
 from unittest.mock import patch
 
-import humanify.cli
-from humanify.output import output_json
+import lynceus.cli
+from lynceus.output import output_json
 
 
 class FakeNarrativeDetector:
@@ -79,22 +79,22 @@ class NarrativeCliGateTest(unittest.TestCase):
     def _run(self, text, mm_checklist=None, detector=None):
         buf = io.StringIO()
         patchers = [
-            patch("humanify.cli._load_detectors",
+            patch("lynceus.cli._load_detectors",
                   return_value=_fake_loaded(detector)),
-            patch("humanify.cli.os._exit", side_effect=SystemExit),
-            patch("humanify.cli.read_input", return_value=text),
+            patch("lynceus.cli.os._exit", side_effect=SystemExit),
+            patch("lynceus.cli.read_input", return_value=text),
             patch("sys.stdout", buf),
         ]
         if mm_checklist is not None:
             patchers.append(
-                patch("humanify.narrative_checklist.run_narrative_checklist",
+                patch("lynceus.narrative_checklist.run_narrative_checklist",
                       return_value=mm_checklist)
             )
         for p in patchers:
             p.start()
         try:
             with self.assertRaises(SystemExit):
-                humanify.cli._main_single(
+                lynceus.cli._main_single(
                     ["--advice", "narrative", "--json", "--file", "-"]
                 )
         finally:

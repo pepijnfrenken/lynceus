@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Cross-detector benchmark for humanify — full-stack comparison on a curated
+"""Cross-detector benchmark for lynceus — full-stack comparison on a curated
 spectrum: human → light AI edit → heavy AI edit → fully AI-generated.
 
 Uses the in-repo benchmarks._common metrics (AUROC, TPR@5%FPR, macro-F1) and
-the humanify detector registry. EditLens is treated as its own axis (edit
+the lynceus detector registry. EditLens is treated as its own axis (edit
 magnitude 0-1, 4 buckets) in addition to the binary AI-probability framing.
 """
 import json
@@ -14,7 +14,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from benchmarks import _common as C  # noqa: E402
-from humanify.analysis import split_sentences  # noqa: E402
+from lynceus.analysis import split_sentences  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Curated spectrum: 4 classes x N samples. Hand-written, real human voice.

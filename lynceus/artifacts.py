@@ -24,7 +24,7 @@ Return::
      "editlens_recommended": bool}
 
 ``score`` is a severity-weighted sum capped at 1.0 (same scheme as
-``humanify.structure``); higher means more post-processing artifacts.
+``lynceus.structure``); higher means more post-processing artifacts.
 """
 
 import re

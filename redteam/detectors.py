@@ -1,7 +1,7 @@
 """
 Detector wrappers for the red team loop.
 
-- Humanify: local inference via subprocess (unlimited, free)
+- Lynceus: local inference via subprocess (unlimited, free)
 - GPTZero: web API (rate-limited, needs API key)
 - StealthWriter: web API (rate-limited, needs API key)
 """
@@ -27,23 +27,23 @@ class DetectionResult:
     latency_ms: float = 0.0
 
 
-class HumanifyDetector:
-    """Run Humanify locally via subprocess. Unlimited, free, no API key."""
+class LynceusDetector:
+    """Run Lynceus locally via subprocess. Unlimited, free, no API key."""
     
     def __init__(
         self,
         model: str = "tmr",
         device: str = "cpu",
         batch_size: int = 32,
-        humanify_bin: str = "uv run humanify",
+        lynceus_bin: str = "uv run lynceus",
     ):
         self.model = model
         self.device = device
         self.batch_size = batch_size
-        self.humanify_bin = humanify_bin
+        self.lynceus_bin = lynceus_bin
     
     def detect(self, text: str) -> DetectionResult:
-        """Score text using local Humanify."""
+        """Score text using local Lynceus."""
         start = time.time()
         try:
             # Write text to a temp file to avoid shell escaping issues
@@ -54,7 +54,7 @@ class HumanifyDetector:
             
             try:
                 cmd = (
-                    f"{self.humanify_bin} --json "
+                    f"{self.lynceus_bin} --json "
                     f"--model {self.model} "
                     f"--device {self.device} "
                     f"--batch-size {self.batch_size} "
@@ -66,7 +66,7 @@ class HumanifyDetector:
                 
                 if result.returncode != 0:
                     return DetectionResult(
-                        detector="humanify",
+                        detector="lynceus",
                         ai_probability=-1.0,
                         error=f"Exit code {result.returncode}: {result.stderr[:500]}",
                         latency_ms=(time.time() - start) * 1000,
@@ -75,7 +75,7 @@ class HumanifyDetector:
                 # Parse JSON output
                 data = json.loads(result.stdout)
                 return DetectionResult(
-                    detector="humanify",
+                    detector="lynceus",
                     ai_probability=data.get("overall_score", -1.0),
                     raw_response=data,
                     latency_ms=(time.time() - start) * 1000,
@@ -85,21 +85,21 @@ class HumanifyDetector:
                 
         except subprocess.TimeoutExpired:
             return DetectionResult(
-                detector="humanify",
+                detector="lynceus",
                 ai_probability=-1.0,
                 error="Timeout (120s)",
                 latency_ms=(time.time() - start) * 1000,
             )
         except json.JSONDecodeError as e:
             return DetectionResult(
-                detector="humanify",
+                detector="lynceus",
                 ai_probability=-1.0,
                 error=f"JSON parse error: {e}",
                 latency_ms=(time.time() - start) * 1000,
             )
         except Exception as e:
             return DetectionResult(
-                detector="humanify",
+                detector="lynceus",
                 ai_probability=-1.0,
                 error=str(e),
                 latency_ms=(time.time() - start) * 1000,
@@ -197,7 +197,7 @@ class StealthWriterDetector:
         warnings.warn(
             "StealthWriterDetector is deprecated: the endpoint is guessed and "
             "KB 03 finds GPTZero flags StealthWriter text at 100% AI. Prefer "
-            "HumanifyDetector / GPTZeroDetector.",
+            "LynceusDetector / GPTZeroDetector.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -263,7 +263,7 @@ class StealthWriterDetector:
 def get_detectors() -> dict[str, object]:
     """Instantiate all available detectors."""
     return {
-        "humanify": HumanifyDetector(),
+        "lynceus": LynceusDetector(),
         "gptzero": GPTZeroDetector(),
         "stealthwriter": StealthWriterDetector(),
     }

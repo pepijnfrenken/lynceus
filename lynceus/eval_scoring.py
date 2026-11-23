@@ -106,13 +106,13 @@ def component_scores(
         ``"raw"`` and ``"normalized"`` keys.
     detector_stats:
         Optional dict with a ``"mean"`` key (the mean detector score
-        across models). When provided, ``humanify_diagnostic`` is
+        across models). When provided, ``lynceus_diagnostic`` is
         ``1.0 - detector_stats["mean"]``.
 
     Returns
     -------
     dict with keys ``preference_rubric``, ``readability_style``,
-    ``repetition_variety``, and ``humanify_diagnostic``.
+    ``repetition_variety``, and ``lynceus_diagnostic``.
     """
     norm = metrics.get("normalized", {})
 
@@ -157,18 +157,18 @@ def component_scores(
         ]
     )
 
-    # --- Humanify diagnostic ---
-    humanify_diagnostic: float | None = None
+    # --- Lynceus diagnostic ---
+    lynceus_diagnostic: float | None = None
     if detector_stats is not None:
         mean_det = detector_stats.get("mean")
         if mean_det is not None:
-            humanify_diagnostic = 1.0 - mean_det
+            lynceus_diagnostic = 1.0 - mean_det
 
     return {
         "preference_rubric": preference_rubric,
         "readability_style": readability_style,
         "repetition_variety": repetition_variety,
-        "humanify_diagnostic": humanify_diagnostic,
+        "lynceus_diagnostic": lynceus_diagnostic,
     }
 
 
@@ -181,9 +181,9 @@ def composite_score(components: dict) -> dict[str, Any]:
     """Compute final composite score from component scores.
 
     Formula: ``0.40*preference_rubric + 0.25*readability_style +
-    0.20*repetition_variety + 0.15*humanify_diagnostic``.
+    0.20*repetition_variety + 0.15*lynceus_diagnostic``.
 
-    When ``humanify_diagnostic`` is None the remaining weights are
+    When ``lynceus_diagnostic`` is None the remaining weights are
     renormalized (divide by 0.85).  Returns a dict with ``"composite"``
     (``float | None``) and ``"weights_applied"`` (``list[str]``).
     """
@@ -191,7 +191,7 @@ def composite_score(components: dict) -> dict[str, Any]:
         "preference_rubric": 0.40,
         "readability_style": 0.25,
         "repetition_variety": 0.20,
-        "humanify_diagnostic": 0.15,
+        "lynceus_diagnostic": 0.15,
     }
 
     composite = 0.0
@@ -266,7 +266,7 @@ def aggregate_samples(sample_records: list[dict]) -> dict[str, Any]:
             "preference_rubric": 0.40,
             "readability_style": 0.25,
             "repetition_variety": 0.20,
-            "humanify_diagnostic": 0.15,
+            "lynceus_diagnostic": 0.15,
         },
         "preference_correlation": {},
     }

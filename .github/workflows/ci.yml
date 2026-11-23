@@ -29,7 +29,7 @@ jobs:
         run: uv run python -m pytest tests/ -q
 
       - name: Byte-compile package
-        run: uv run python -m compileall humanify tests
+        run: uv run python -m compileall lynceus tests
 
       - name: CLI smoke test
-        run: uv run humanify --help
+        run: uv run lynceus --help

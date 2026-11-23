@@ -1,4 +1,4 @@
-"""Tests for humanify.evaluator — batch eval runner."""
+"""Tests for lynceus.evaluator — batch eval runner."""
 from __future__ import annotations
 
 import io
@@ -7,7 +7,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from humanify.evaluator import run_eval
+from lynceus.evaluator import run_eval
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 EVAL_INPUT = os.path.join(FIXTURES_DIR, "eval_input.jsonl")
@@ -116,8 +116,8 @@ class EvaluatorTest(unittest.TestCase):
     def _run_patched(self, **kwargs):
         """Run with writing metrics and detector patched."""
         with (
-            patch("humanify.evaluator._load_detectors", side_effect=_fake_load_detectors),
-            patch("humanify.evaluator.compute_writing_metrics", side_effect=_fake_metrics),
+            patch("lynceus.evaluator._load_detectors", side_effect=_fake_load_detectors),
+            patch("lynceus.evaluator.compute_writing_metrics", side_effect=_fake_metrics),
         ):
             return self._run(**kwargs)
 
@@ -173,7 +173,7 @@ class EvaluatorTest(unittest.TestCase):
         """Nonexistent input path returns 2 and writes to stderr."""
         # Only patch writing metrics — detector loading is irrelevant here
         # since we fail before reaching it
-        with patch("humanify.evaluator.compute_writing_metrics", side_effect=_fake_metrics):
+        with patch("lynceus.evaluator.compute_writing_metrics", side_effect=_fake_metrics):
             ret, out, err = self._run(input_path="/nonexistent/eval_input.jsonl")
         self.assertEqual(ret, 2)
         self.assertIn("Error:", err)
@@ -185,8 +185,8 @@ class EvaluatorTest(unittest.TestCase):
         stdout = io.StringIO()
         stderr = io.StringIO()
         with (
-            patch("humanify.evaluator._load_detectors", side_effect=_fake_load_detectors),
-            patch("humanify.evaluator.compute_writing_metrics", side_effect=_fake_metrics),
+            patch("lynceus.evaluator._load_detectors", side_effect=_fake_load_detectors),
+            patch("lynceus.evaluator.compute_writing_metrics", side_effect=_fake_metrics),
             patch("sys.stdin", new=io.StringIO(stdin_data)),
         ):
             ret = run_eval(
@@ -240,9 +240,9 @@ class EvaluatorTest(unittest.TestCase):
             raise RuntimeError("simulated scoring failure")
 
         with (
-            patch("humanify.evaluator._load_detectors", side_effect=_fake_load_detectors),
-            patch("humanify.evaluator.compute_writing_metrics", side_effect=_fake_metrics),
-            patch("humanify.evaluator._score_text", side_effect=broken_score),
+            patch("lynceus.evaluator._load_detectors", side_effect=_fake_load_detectors),
+            patch("lynceus.evaluator.compute_writing_metrics", side_effect=_fake_metrics),
+            patch("lynceus.evaluator._score_text", side_effect=broken_score),
         ):
             stdout = io.StringIO()
             stderr = io.StringIO()
@@ -257,7 +257,7 @@ class EvaluatorTest(unittest.TestCase):
     def test_eval_unknown_detector_returns_1(self):
         """Unknown detector name returns 1 with descriptive error."""
         # Do NOT patch _load_detectors — let the real cli function raise
-        with patch("humanify.evaluator.compute_writing_metrics", side_effect=_fake_metrics):
+        with patch("lynceus.evaluator.compute_writing_metrics", side_effect=_fake_metrics):
             stdout = io.StringIO()
             stderr = io.StringIO()
             ret = run_eval(

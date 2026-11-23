@@ -1,8 +1,8 @@
-"""Tests for humanify.analysis.generate_quality_advice."""
+"""Tests for lynceus.analysis.generate_quality_advice."""
 
 import unittest
 
-from humanify.analysis import generate_quality_advice
+from lynceus.analysis import generate_quality_advice
 
 
 class QualityAdviceTest(unittest.TestCase):

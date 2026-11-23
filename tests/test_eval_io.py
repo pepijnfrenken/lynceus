@@ -1,11 +1,11 @@
-"""Tests for humanify.eval_io."""
+"""Tests for lynceus.eval_io."""
 
 import json
 import math
 import unittest
 from pathlib import Path
 
-from humanify.eval_io import (
+from lynceus.eval_io import (
     SCHEMA_VERSION,
     DuplicateIdError,
     EvalSample,

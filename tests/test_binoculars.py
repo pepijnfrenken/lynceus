@@ -3,7 +3,7 @@
 import unittest
 import warnings
 
-from humanify.detectors.binoculars import BinocularsDetector
+from lynceus.detectors.binoculars import BinocularsDetector
 
 
 class BinocularsDegenerationTest(unittest.TestCase):

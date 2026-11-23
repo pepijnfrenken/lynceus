@@ -1,4 +1,4 @@
-"""Tests for humanify.narrative_checklist (Task A, Phase 5.1).
+"""Tests for lynceus.narrative_checklist (Task A, Phase 5.1).
 
 No real LLM calls -- the module takes a dependency-injected callable. We assert
 the gate (short text -> disabled, no call) and tolerant parsing.
@@ -8,7 +8,7 @@ import json
 import unittest
 from unittest.mock import Mock
 
-from humanify.narrative_checklist import (
+from lynceus.narrative_checklist import (
     NARRATIVE_DIMENSIONS,
     build_narrative_prompt,
     parse_narrative_response,

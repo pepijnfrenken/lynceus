@@ -1,4 +1,4 @@
-"""CLI entry point for humanify."""
+"""CLI entry point for lynceus."""
 
 import argparse
 import logging
@@ -344,7 +344,7 @@ def _main_single(argv: list[str] | None = None) -> int:
     deadlocks during interpreter cleanup. Error paths return a normal int.
     """
     parser = argparse.ArgumentParser(
-        prog="humanify",
+        prog="lynceus",
         description="Analyze text for AI-like patterns using transformer models.",
     )
     parser.add_argument("--file", "-f", type=str, default=None,
@@ -611,7 +611,7 @@ def _main_single(argv: list[str] | None = None) -> int:
 def _main_eval(argv: list[str]) -> None:
     """Parse eval subcommand args and run batch evaluator."""
     parser = argparse.ArgumentParser(
-        prog="humanify eval",
+        prog="lynceus eval",
         description="Batch evaluate text quality with deterministic metrics. "
                     "Reads JSONL input, emits metrics-only sample and summary records. "
                     "No rewrite advice or detection-evasion suggestions.",

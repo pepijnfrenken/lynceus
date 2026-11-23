@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
 
-from humanify.analysis import generate_advice, normalize_for_detection, prepare_scoring_units
+from lynceus.analysis import generate_advice, normalize_for_detection, prepare_scoring_units
 
 
 class AnalysisScoringUnitTest(unittest.TestCase):
@@ -100,7 +100,7 @@ if __name__ == "__main__":
 
 
 import unittest as _u
-from humanify.analysis import (
+from lynceus.analysis import (
     AI_FILLERS, find_markers, find_markers_weighted, find_pattern_tells,
 )
 
@@ -131,7 +131,7 @@ class EraAwareVocabTest(unittest.TestCase):
         self.assertIn("crucial", matched)
 
     def test_high_weight_match_surfaces_first_in_advice(self):
-        from humanify.analysis import generate_advice as _ga
+        from lynceus.analysis import generate_advice as _ga
         sentence = "We showcase a delve into the topic."
         tips, _, _ = _ga(
             [sentence], [0.9], [find_markers(sentence)],

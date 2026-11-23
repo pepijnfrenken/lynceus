@@ -1,8 +1,8 @@
-"""Shared evaluation harness for the humanify robustness suite (Phase 1).
+"""Shared evaluation harness for the lynceus robustness suite (Phase 1).
 
 This module implements the metric + detector-loop + per-layer logic shared by
 the RAID, M4 and H2L eval scripts. It depends only on :mod:`numpy` plus the
-in-repo :mod:`humanify` package, so it runs under the project's existing
+in-repo :mod:`lynceus` package, so it runs under the project's existing
 dependencies (transformers, torch, rich, numpy). It deliberately does NOT
 require sklearn -- all ranking metrics are implemented in numpy.
 
@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
-from humanify.analysis import find_markers, normalize_for_detection, split_sentences
+from lynceus.analysis import find_markers, normalize_for_detection, split_sentences
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +321,7 @@ def compute_layer_metrics(texts, labels, detector_results) -> dict:
 # ---------------------------------------------------------------------------
 
 def load_detector_specs(det_names, device="cpu", fp16=False):
-    """Instantiate + load real detectors from the humanify registry.
+    """Instantiate + load real detectors from the lynceus registry.
 
     The same-model Binoculars implementation is degenerate (cross-perplexity
     with identical models == plain perplexity, KB 06), so it is labelled
@@ -329,7 +329,7 @@ def load_detector_specs(det_names, device="cpu", fp16=False):
     """
     os.environ.setdefault("TRANSFORMERS_VERBOSITY", "critical")
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-    from humanify.detectors import get_detector
+    from lynceus.detectors import get_detector
 
     specs = []
     for name in det_names:

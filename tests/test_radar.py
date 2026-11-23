@@ -6,8 +6,8 @@ No model downloads — the pipeline is driven through monkeypatched fakes.
 import unittest
 from unittest.mock import patch
 
-from humanify.detectors import DETECTORS
-from humanify.detectors.radar import RadarDetector
+from lynceus.detectors import DETECTORS
+from lynceus.detectors.radar import RadarDetector
 
 
 def _fake_pipeline_row(labels_scores):
@@ -78,7 +78,7 @@ class RadarScoreTest(unittest.TestCase):
     def test_short_text_calibration_pulls_toward_neutral(self):
         # Measured saturation: a 10-word human snippet reads ~0.999 raw; the
         # calibrated score must be pulled well below 0.7 (weak evidence).
-        from humanify.detectors.radar import _calibrate_short_text, MIN_RELIABLE_WORDS
+        from lynceus.detectors.radar import _calibrate_short_text, MIN_RELIABLE_WORDS
 
         self.assertAlmostEqual(_calibrate_short_text(0.999, 10), 0.5 + 0.499 * 0.1)
         # At/above the threshold the raw score is returned unchanged.

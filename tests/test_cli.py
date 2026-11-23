@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 import numpy as np
 
-from humanify.analysis import ScoringUnit
-from humanify.cli import (
+from lynceus.analysis import ScoringUnit
+from lynceus.cli import (
     _expand_unit_scores,
     _main_single,
     _resolve_device,
@@ -77,13 +77,13 @@ class CliScoreTextTest(unittest.TestCase):
 
     def test_score_text_does_not_call_advice_functions(self):
         raw = "This is test sentence number one. This is test sentence number two."
-        with (patch("humanify.analysis.generate_advice", side_effect=Exception("should not be called")),
-              patch("humanify.advice_llm.generate_llm_advice", side_effect=Exception("should not be called"))):
+        with (patch("lynceus.analysis.generate_advice", side_effect=Exception("should not be called")),
+              patch("lynceus.advice_llm.generate_llm_advice", side_effect=Exception("should not be called"))):
             result = _score_text(raw, loaded_detectors=_FAKE_DETECTORS, batch_size=32)
         self.assertEqual(len(result["sentences"]), 2)
 
     def test_main_single_rejects_empty_input(self):
-        with patch("humanify.cli.read_input", return_value=""):
+        with patch("lynceus.cli.read_input", return_value=""):
             with patch("sys.stderr", new=io.StringIO()) as stderr:
                 ret = _main_single(["--file", "/dev/null"])
         self.assertEqual(ret, 1)
@@ -91,8 +91,8 @@ class CliScoreTextTest(unittest.TestCase):
 
     def test_main_single_json_includes_writing_quality(self):
         raw = "The cat sat on the mat. It was very happy."
-        with patch("humanify.cli.read_input", return_value=raw):
-            with patch("humanify.cli._load_detectors", return_value=_FAKE_DETECTORS):
+        with patch("lynceus.cli.read_input", return_value=raw):
+            with patch("lynceus.cli._load_detectors", return_value=_FAKE_DETECTORS):
                 with patch("sys.stdout", new=io.StringIO()) as stdout:
                     with patch("os._exit"):
                         _main_single(["--json"])
@@ -105,8 +105,8 @@ class CliScoreTextTest(unittest.TestCase):
 
     def test_main_single_academic_style_includes_paragraph_analysis(self):
         raw = "Gamification can improve learning. It adds game elements.\n\nHowever, poorly designed gamification can cause anxiety.\n\nIn conclusion, gamification helps when designed well."
-        with patch("humanify.cli.read_input", return_value=raw):
-            with patch("humanify.cli._load_detectors", return_value=_FAKE_DETECTORS):
+        with patch("lynceus.cli.read_input", return_value=raw):
+            with patch("lynceus.cli._load_detectors", return_value=_FAKE_DETECTORS):
                 with patch("sys.stdout", new=io.StringIO()) as stdout:
                     with patch("os._exit"):
                         _main_single(["--json", "--style", "academic"])
@@ -255,7 +255,7 @@ class CliEnsembleAxesTest(unittest.TestCase):
 
 class CliAxesOutputJsonTest(unittest.TestCase):
     def test_output_json_emits_axes_and_confidence(self):
-        from humanify.output import output_json
+        from lynceus.output import output_json
 
         axes = {
             "overall": 0.2,

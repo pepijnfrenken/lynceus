@@ -28,7 +28,7 @@ therefore compares the RAW score against ``cfg["score_offsets"]["overall"]
 The detector keeps those live on the instance (``threshold`` /
 ``strata_thresholds``) plus the raw per-unit scores from the last
 ``score()`` call (``last_raw_scores``) and word counts
-(``last_word_counts``), see ``flag_units()``. humanify's JSON schema has no
+(``last_word_counts``), see ``flag_units()``. lynceus's JSON schema has no
 per-detector extra-field slot, so raw/threshold stay internal and documented
 here rather than in the CLI output.
 
@@ -39,7 +39,7 @@ here rather than in the CLI output.
   treated as weak evidence and blended toward neutral 0.5 below
   ``MIN_RELIABLE_WORDS`` (see ``_calibrate_short_text``).
 * **2048-token cap** — ``cfg["max_length"]``; longer documents must be split
-  and scores aggregated. humanify's 320-word scoring-unit chunking keeps each
+  and scores aggregated. lynceus's 320-word scoring-unit chunking keeps each
   unit well under the cap, so the per-unit score is the document score.
 * **Keep original line breaks** — re-flowing paragraphs shifts the score; the
   model was trained on raw document formatting. Scoring units are built by
@@ -48,7 +48,7 @@ here rather than in the CLI output.
   documented here for anyone piping raw text in for reference scoring.
 
 License is MIT (per the model card). Weights load into the Hugging Face cache
-(out of git); ``HUMANIFY_MELD_DIR`` overrides the source directory (useful
+(out of git); ``LYNCEUS_MELD_DIR`` overrides the source directory (useful
 fallback if the hub download is unavailable).
 """
 
@@ -160,7 +160,7 @@ class MeldDetector(Detector):
         self.last_word_counts: list[int] | None = None
 
     def load(self, device: str, fp16: bool = False) -> None:
-        model_dir = os.environ.get("HUMANIFY_MELD_DIR")
+        model_dir = os.environ.get("LYNCEUS_MELD_DIR")
         try:
             if model_dir is None:
                 model_dir = snapshot_download(self._model_id)
@@ -174,7 +174,7 @@ class MeldDetector(Detector):
         except Exception as exc:  # noqa: BLE001 - any hub/dtype error is fatal
             raise RuntimeError(
                 f"MELD model '{self._model_id}' could not be loaded. "
-                "Set HUMANIFY_MELD_DIR to a local directory containing the "
+                "Set LYNCEUS_MELD_DIR to a local directory containing the "
                 f"checkpoint (meld_config.json + model.safetensors) as a "
                 f"fallback. Original error: {exc}"
             ) from exc

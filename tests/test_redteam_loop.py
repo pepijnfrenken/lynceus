@@ -12,11 +12,11 @@ from redteam.detectors import DetectionResult
 
 
 def _make_loop():
-    cfg = RedTeamConfig(detectors=["humanify"])
+    cfg = RedTeamConfig(detectors=["lynceus"])
     loop = RedTeamLoop(cfg)
     # never run a real subprocess detector in tests
     loop.detect = lambda text: {
-        "humanify": DetectionResult("humanify", 0.0),
+        "lynceus": DetectionResult("lynceus", 0.0),
     }
     return loop
 
@@ -47,7 +47,7 @@ class LoopStrategyDispatchTest(unittest.TestCase):
 
     def test_paraphrase_verify_strategy_routes(self):
         loop = _make_loop()
-        loop.detect = lambda _t: {"humanify": DetectionResult("humanify", 0.1 if "ROUND1" in _t else 0.9)}
+        loop.detect = lambda _t: {"lynceus": DetectionResult("lynceus", 0.1 if "ROUND1" in _t else 0.9)}
         with patch("redteam.transforms.llm_rewrite",
                    side_effect=lambda t, **kw: t + " ROUND1"), \
              patch("redteam.transforms._ollama_generate", return_value="x"):
@@ -58,7 +58,7 @@ class LoopStrategyDispatchTest(unittest.TestCase):
 
     def test_guided_optimize_strategy_routes(self):
         loop = _make_loop()
-        loop.detect = lambda _t: {"humanify": DetectionResult("humanify", 0.1 if "gen_candidate" in _t else 0.9)}
+        loop.detect = lambda _t: {"lynceus": DetectionResult("lynceus", 0.1 if "gen_candidate" in _t else 0.9)}
         with patch("redteam.transforms._ollama_generate",
                    return_value="gen_candidate"):
             out, applied = loop.get_strategy_text("guided_optimize", "in")

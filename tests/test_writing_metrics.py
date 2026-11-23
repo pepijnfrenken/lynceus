@@ -1,8 +1,8 @@
-"""Tests for humanify.writing_metrics — deterministic writing quality metrics."""
+"""Tests for lynceus.writing_metrics — deterministic writing quality metrics."""
 
 import unittest
 
-from humanify.writing_metrics import compute_writing_metrics, clamp
+from lynceus.writing_metrics import compute_writing_metrics, clamp
 
 
 def _is_none_or_in_range(value, lo=0.0, hi=1.0):
@@ -441,21 +441,21 @@ class EvidenceTest(unittest.TestCase):
 
 class SentenceAnalysisTest(unittest.TestCase):
     def test_passive_flag_detected(self):
-        from humanify.writing_metrics import analyze_sentences
+        from lynceus.writing_metrics import analyze_sentences
         sentences = ["The ball was eaten by John.", "John threw the ball."]
         result = analyze_sentences(sentences)
         self.assertIn("passive_voice", result[0]["flags"])
         self.assertNotIn("passive_voice", result[1]["flags"])
 
     def test_weak_modifiers_flag_detected(self):
-        from humanify.writing_metrics import analyze_sentences
+        from lynceus.writing_metrics import analyze_sentences
         sentences = ["It is very really quite good."]
         result = analyze_sentences(sentences)
         flags = result[0]["flags"]
         self.assertTrue(any(f.startswith("weak_modifiers") for f in flags))
 
     def test_runon_flag_detected(self):
-        from humanify.writing_metrics import analyze_sentences
+        from lynceus.writing_metrics import analyze_sentences
         sentences = [
             "This is a very long sentence, with many clauses, and extra words, and even more words, and it just keeps going and going and going forever."
         ]
@@ -463,13 +463,13 @@ class SentenceAnalysisTest(unittest.TestCase):
         self.assertIn("runon", result[0]["flags"])
 
     def test_no_evidence_flag(self):
-        from humanify.writing_metrics import analyze_sentences
+        from lynceus.writing_metrics import analyze_sentences
         sentences = ["The cat sat on the mat."]
         result = analyze_sentences(sentences)
         self.assertIn("no_evidence", result[0]["flags"])
 
     def test_citation_evidence_flag(self):
-        from humanify.writing_metrics import analyze_sentences
+        from lynceus.writing_metrics import analyze_sentences
         sentences = ["Smith (2019) found that the method works."]
         result = analyze_sentences(sentences)
         self.assertIn("citation", result[0]["flags"])
@@ -478,7 +478,7 @@ class SentenceAnalysisTest(unittest.TestCase):
 
 class TopWorstSentencesTest(unittest.TestCase):
     def test_returns_worst_sentences(self):
-        from humanify.writing_metrics import get_top_worst_sentences
+        from lynceus.writing_metrics import get_top_worst_sentences
         sentences = [
             "The ball was thrown by John very quickly.",
             "John threw the ball.",
@@ -490,13 +490,13 @@ class TopWorstSentencesTest(unittest.TestCase):
         self.assertIn("thrown", worst[0][0])
 
     def test_empty_list(self):
-        from humanify.writing_metrics import get_top_worst_sentences
+        from lynceus.writing_metrics import get_top_worst_sentences
         self.assertEqual(get_top_worst_sentences([], "grammar"), [])
 
 
 class ParagraphAnalysisTest(unittest.TestCase):
     def test_split_paragraphs(self):
-        from humanify.writing_metrics import split_paragraphs
+        from lynceus.writing_metrics import split_paragraphs
         text = "The first sentence is here. The second sentence is there.\n\nThe third sentence is here. The fourth sentence is there."
         paragraphs = split_paragraphs(text)
         self.assertEqual(len(paragraphs), 2)
@@ -504,7 +504,7 @@ class ParagraphAnalysisTest(unittest.TestCase):
         self.assertEqual(len(paragraphs[1]), 2)
 
     def test_analyze_paragraphs_structure(self):
-        from humanify.writing_metrics import analyze_paragraphs
+        from lynceus.writing_metrics import analyze_paragraphs
         text = (
             "Gamification can improve learning for students. It adds game elements to education.\n\n"
             "However, poorly designed gamification can cause anxiety for students. "
@@ -518,7 +518,7 @@ class ParagraphAnalysisTest(unittest.TestCase):
         self.assertGreaterEqual(result["thesis_alignment"], 0.0)
 
     def test_empty_text(self):
-        from humanify.writing_metrics import analyze_paragraphs
+        from lynceus.writing_metrics import analyze_paragraphs
         result = analyze_paragraphs("")
         self.assertEqual(result["paragraph_count"], 0)
 
@@ -542,7 +542,7 @@ if __name__ == "__main__":
 
 class SynthesisDetectionTest(unittest.TestCase):
     def test_synthesis_detected_as_evidence(self):
-        from humanify.writing_metrics import _sentence_has_synthesis, _sentence_has_evidence
+        from lynceus.writing_metrics import _sentence_has_synthesis, _sentence_has_evidence
         sentences = [
             "Several studies have found that gamification improves engagement.",
             "Research generally supports the use of dashboards in education.",
@@ -554,7 +554,7 @@ class SynthesisDetectionTest(unittest.TestCase):
             # When combined in analyze_sentences, synthesis prevents no_evidence flag
 
     def test_no_synthesis_in_plain_sentences(self):
-        from humanify.writing_metrics import _sentence_has_synthesis
+        from lynceus.writing_metrics import _sentence_has_synthesis
         sentences = [
             "The cat sat on the mat.",
             "Gamification is fun.",
@@ -566,34 +566,34 @@ class SynthesisDetectionTest(unittest.TestCase):
 
 class SentenceQualityScoreTest(unittest.TestCase):
     def test_clean_sentence_perfect_score(self):
-        from humanify.writing_metrics import _compute_sentence_quality_score
+        from lynceus.writing_metrics import _compute_sentence_quality_score
         self.assertEqual(_compute_sentence_quality_score([]), 10.0)
         self.assertEqual(_compute_sentence_quality_score(["synthesis"]), 10.0)
 
     def test_runon_penalty(self):
-        from humanify.writing_metrics import _compute_sentence_quality_score
+        from lynceus.writing_metrics import _compute_sentence_quality_score
         score = _compute_sentence_quality_score(["runon"])
         self.assertEqual(score, 7.0)  # 10 - 3.0
 
     def test_multiple_flags_penalty(self):
-        from humanify.writing_metrics import _compute_sentence_quality_score
+        from lynceus.writing_metrics import _compute_sentence_quality_score
         score = _compute_sentence_quality_score(["passive_voice", "no_evidence"])
         self.assertEqual(score, 6.0)  # 10 - 2.0 - 2.0
 
     def test_counted_flags_penalty(self):
-        from humanify.writing_metrics import _compute_sentence_quality_score
+        from lynceus.writing_metrics import _compute_sentence_quality_score
         score = _compute_sentence_quality_score(["weak_modifiers(3)"])
         self.assertEqual(score, 7.0)  # 10 - 1.0 * 3
 
     def test_score_never_negative(self):
-        from humanify.writing_metrics import _compute_sentence_quality_score
+        from lynceus.writing_metrics import _compute_sentence_quality_score
         score = _compute_sentence_quality_score(["runon", "passive_voice", "no_evidence", "no_concrete_details", "weak_modifiers(5)", "vague_words(5)"])
         self.assertEqual(score, 0.0)
 
 
 class ParagraphCleaningTest(unittest.TestCase):
     def test_form_feed_stripped(self):
-        from humanify.writing_metrics import _clean_text_for_paragraphs
+        from lynceus.writing_metrics import _clean_text_for_paragraphs
         text = "First paragraph.\n\n\fSecond paragraph."
         cleaned = _clean_text_for_paragraphs(text)
         self.assertNotIn("\f", cleaned)
@@ -601,19 +601,19 @@ class ParagraphCleaningTest(unittest.TestCase):
         self.assertIn("Second paragraph", cleaned)
 
     def test_page_numbers_stripped(self):
-        from humanify.writing_metrics import _clean_text_for_paragraphs
+        from lynceus.writing_metrics import _clean_text_for_paragraphs
         text = "First paragraph with enough words here.\n\n15\n\nSecond paragraph."
         cleaned = _clean_text_for_paragraphs(text)
         self.assertNotIn("15", cleaned)
 
     def test_figure_captions_stripped(self):
-        from humanify.writing_metrics import _clean_text_for_paragraphs
+        from lynceus.writing_metrics import _clean_text_for_paragraphs
         text = "First paragraph.\n\nFigure 3: LAD Overview\n\nSecond paragraph."
         cleaned = _clean_text_for_paragraphs(text)
         self.assertNotIn("Figure 3", cleaned)
 
     def test_short_header_blocks_skipped(self):
-        from humanify.writing_metrics import split_paragraphs
+        from lynceus.writing_metrics import split_paragraphs
         text = "First paragraph with enough words here.\n\n15\n\nFigure 3: Overview\n\nSecond paragraph with multiple sentences. It continues here today."
         paragraphs = split_paragraphs(text)
         self.assertEqual(len(paragraphs), 2)

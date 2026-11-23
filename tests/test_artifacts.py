@@ -1,4 +1,4 @@
-"""Tests for humanify.artifacts -- detector-of-humanizers layer (Task C, Phase 4.3).
+"""Tests for lynceus.artifacts -- detector-of-humanizers layer (Task C, Phase 4.3).
 
 Pure-python heuristic findings; no models are involved.
 """
@@ -6,7 +6,7 @@ Pure-python heuristic findings; no models are involved.
 import json
 import unittest
 
-from humanify.artifacts import detect_artifacts
+from lynceus.artifacts import detect_artifacts
 
 _ZERO_WIDTH_SAMPLE = (
     "This sentence has a zero​width joiner hidden inside the word field."
@@ -113,7 +113,7 @@ class ArtifactsCliWiringTest(unittest.TestCase):
     """Task C wiring: consume artifact_audit end-to-end via JSON."""
 
     def test_score_text_includes_artifact_audit(self):
-        from humanify.cli import _score_text
+        from lynceus.cli import _score_text
 
         class FakeDet:
             name = "fake"
@@ -139,7 +139,7 @@ class ArtifactsCliWiringTest(unittest.TestCase):
     def test_output_json_emits_artifact_audit_key(self):
         from io import StringIO
         from unittest.mock import patch
-        from humanify.output import output_json
+        from lynceus.output import output_json
 
         audit = {
             "score": 0.4,

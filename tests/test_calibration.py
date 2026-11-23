@@ -3,7 +3,7 @@ import unittest
 
 
 
-from humanify.calibration import DOMAINS, calibrate
+from lynceus.calibration import DOMAINS, calibrate
 
 
 class CalibrationTest(unittest.TestCase):
@@ -51,7 +51,7 @@ class CalibrationOutputJsonTest(unittest.TestCase):
     def test_output_json_includes_domain_keys(self):
         from io import StringIO
         from unittest.mock import patch
-        from humanify.output import output_json
+        from lynceus.output import output_json
 
         calibrated = calibrate({"stats": {"std": 0.12, "mean": 0.9}}, "academic")
         buf = StringIO()

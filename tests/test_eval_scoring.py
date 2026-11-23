@@ -1,11 +1,11 @@
-"""Tests for humanify.eval_scoring — composite scoring, aggregation, and
+"""Tests for lynceus.eval_scoring — composite scoring, aggregation, and
 preference correlation."""
 
 import math
 import unittest
 
-from humanify.eval_io import PreferencePair
-from humanify.eval_scoring import (
+from lynceus.eval_io import PreferencePair
+from lynceus.eval_scoring import (
     aggregate_samples,
     component_scores,
     composite_score,
@@ -129,7 +129,7 @@ class ComponentScoresTest(unittest.TestCase):
         self.assertIn("preference_rubric", components)
         self.assertIn("readability_style", components)
         self.assertIn("repetition_variety", components)
-        self.assertIn("humanify_diagnostic", components)
+        self.assertIn("lynceus_diagnostic", components)
 
         self.assertAlmostEqual(
             components["preference_rubric"], EXPECTED_PREFERENCE_RUBRIC
@@ -140,12 +140,12 @@ class ComponentScoresTest(unittest.TestCase):
         self.assertEqual(
             components["repetition_variety"], EXPECTED_REPETITION_VARIETY
         )
-        self.assertIsNone(components["humanify_diagnostic"])
+        self.assertIsNone(components["lynceus_diagnostic"])
 
     def test_with_detector_stats(self):
         detector_stats = {"mean": 0.25}
         components = component_scores(FIXTURE_METRICS, detector_stats)
-        self.assertAlmostEqual(components["humanify_diagnostic"], 0.75)
+        self.assertAlmostEqual(components["lynceus_diagnostic"], 0.75)
         self.assertAlmostEqual(
             components["preference_rubric"], EXPECTED_PREFERENCE_RUBRIC
         )
@@ -166,7 +166,7 @@ class ComponentScoresTest(unittest.TestCase):
         self.assertIsNone(components["preference_rubric"])
         self.assertIsNone(components["readability_style"])
         self.assertIsNone(components["repetition_variety"])
-        self.assertIsNone(components["humanify_diagnostic"])
+        self.assertIsNone(components["lynceus_diagnostic"])
 
     def test_output_scores_in_range(self):
         components = component_scores(FIXTURE_METRICS)
@@ -186,7 +186,7 @@ class CompositeScoreTest(unittest.TestCase):
         components = component_scores(FIXTURE_METRICS)
         result = composite_score(components)
 
-        # humanify_diagnostic is None, so renormalize by 0.85
+        # lynceus_diagnostic is None, so renormalize by 0.85
         numerator = (
             0.40 * EXPECTED_PREFERENCE_RUBRIC
             + 0.25 * EXPECTED_READABILITY_STYLE
@@ -204,12 +204,12 @@ class CompositeScoreTest(unittest.TestCase):
             "preference_rubric": 0.80,
             "readability_style": 0.70,
             "repetition_variety": 0.60,
-            "humanify_diagnostic": None,
+            "lynceus_diagnostic": None,
         }
         result = composite_score(components)
         expected = (0.40 * 0.80 + 0.25 * 0.70 + 0.20 * 0.60) / 0.85
         self.assertAlmostEqual(result["composite"], expected, places=6)
-        self.assertNotIn("humanify_diagnostic", result["weights_applied"])
+        self.assertNotIn("lynceus_diagnostic", result["weights_applied"])
 
     def test_all_components_scores_in_range(self):
         components = component_scores(FIXTURE_METRICS)
@@ -224,7 +224,7 @@ class CompositeScoreTest(unittest.TestCase):
             "preference_rubric": None,
             "readability_style": None,
             "repetition_variety": None,
-            "humanify_diagnostic": None,
+            "lynceus_diagnostic": None,
         }
         result = composite_score(components)
         self.assertIsNone(result["composite"])
@@ -421,7 +421,7 @@ class AggregateSamplesTest(unittest.TestCase):
             "preference_rubric": 0.40,
             "readability_style": 0.25,
             "repetition_variety": 0.20,
-            "humanify_diagnostic": 0.15,
+            "lynceus_diagnostic": 0.15,
         }
         self.assertEqual(result["weights"], expected_weights)
 

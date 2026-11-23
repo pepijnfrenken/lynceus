@@ -8,8 +8,8 @@ mocking ``from_pretrained`` to raise.
 import unittest
 from unittest.mock import patch
 
-from humanify.detectors import DETECTORS
-from humanify.detectors.editlens import EditLensDetector
+from lynceus.detectors import DETECTORS
+from lynceus.detectors.editlens import EditLensDetector
 from tests._fakes import FakeSeqClassifier, FakeTokenizer
 
 
@@ -40,9 +40,9 @@ class EditlensLoadAndScoreTest(unittest.TestCase):
     def test_score_returns_bounded_float_per_text(self):
         det = EditLensDetector()
         fake_model = FakeSeqClassifier(num_labels=3)
-        with patch("humanify.detectors.editlens.AutoTokenizer.from_pretrained",
+        with patch("lynceus.detectors.editlens.AutoTokenizer.from_pretrained",
                    return_value=FakeTokenizer()), \
-             patch("humanify.detectors.editlens.AutoModelForSequenceClassification.from_pretrained",
+             patch("lynceus.detectors.editlens.AutoModelForSequenceClassification.from_pretrained",
                    return_value=fake_model):
             det.load("cpu", fp16=False)
         texts = ["Human-like polished sentence with a few changes.",
@@ -67,9 +67,9 @@ class EditlensGatedLoadTest(unittest.TestCase):
         def boom(*a, **k):
             raise RuntimeError("401 Unauthorized / gated repository")
 
-        with patch("humanify.detectors.editlens.AutoTokenizer.from_pretrained",
+        with patch("lynceus.detectors.editlens.AutoTokenizer.from_pretrained",
                    return_value=FakeTokenizer()), \
-             patch("humanify.detectors.editlens.AutoModelForSequenceClassification.from_pretrained",
+             patch("lynceus.detectors.editlens.AutoModelForSequenceClassification.from_pretrained",
                    side_effect=boom):
             with self.assertRaises(RuntimeError) as ctx:
                 det.load("cpu", fp16=False)

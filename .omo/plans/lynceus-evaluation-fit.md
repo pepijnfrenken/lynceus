@@ -1,9 +1,9 @@
-# Humanify Evaluation Fit
+# Lynceus Evaluation Fit
 
 ## TL;DR
-> **Summary**: Add a deterministic `humanify eval` subsystem for batch JSONL evaluation, writing-quality metrics, human preference correlation, and a composite score while preserving the existing single-text detector CLI.
+> **Summary**: Add a deterministic `lynceus eval` subsystem for batch JSONL evaluation, writing-quality metrics, human preference correlation, and a composite score while preserving the existing single-text detector CLI.
 > **Deliverables**:
-> - `humanify eval` subcommand for JSONL input records `{id, prompt, candidate, reference?}`.
+> - `lynceus eval` subcommand for JSONL input records `{id, prompt, candidate, reference?}`.
 > - Metrics-only per-sample JSONL output plus final aggregate summary line.
 > - Deterministic writing metrics, composite scoring, and preference-correlation support.
 > - Tiny repo fixtures, external preference-label support, unittest coverage, and README docs.
@@ -13,10 +13,10 @@
 
 ## Context
 ### Original Request
-Add batch JSONL evaluator, non-detector writing metrics, human preference correlation, evaluation-only mode, and composite score so `humanify` fits better as an evaluation tool.
+Add batch JSONL evaluator, non-detector writing metrics, human preference correlation, evaluation-only mode, and composite score so `lynceus` fits better as an evaluation tool.
 
 ### Interview Summary
-- Evaluator interface: new `humanify eval` subcommand.
+- Evaluator interface: new `lynceus eval` subcommand.
 - Output contract: one JSON object per sample, then a final aggregate summary object as the last JSONL line.
 - Test strategy: tests-after using the existing `unittest` suite.
 - Composite judge/rubric: deterministic only; no required LLM dependency.
@@ -34,15 +34,15 @@ Implement a deterministic, metrics-only evaluation mode that scores batches of c
 
 ### Deliverables
 - New modules for JSONL eval I/O, deterministic writing metrics, composite scoring, aggregation, and preference correlation.
-- Refactored CLI with `humanify eval --input INPUT.jsonl [--preferences PREFS.jsonl]` while preserving existing `humanify --file ...` behavior.
+- Refactored CLI with `lynceus eval --input INPUT.jsonl [--preferences PREFS.jsonl]` while preserving existing `lynceus --file ...` behavior.
 - Test fixtures under `tests/fixtures/` for valid eval input, invalid eval input, duplicate IDs, and preference labels.
 - README section documenting eval mode, schemas, examples, and safety boundaries.
 
 ### Definition of Done (verifiable conditions with commands)
 - `uv run python -m unittest discover tests` exits `0`.
-- `uv run python -m compileall humanify tests` exits `0`.
-- `uv run humanify --help` still documents the existing single-text options.
-- `uv run humanify eval --help` documents JSONL eval input, preferences, model, device, and batch-size options.
+- `uv run python -m compileall lynceus tests` exits `0`.
+- `uv run lynceus --help` still documents the existing single-text options.
+- `uv run lynceus eval --help` documents JSONL eval input, preferences, model, device, and batch-size options.
 - Eval output contains no keys or text containing `advice`, `rewrite`, `avoid detection`, `bypass`, or `evade`.
 
 ### Must Have
@@ -53,7 +53,7 @@ Implement a deterministic, metrics-only evaluation mode that scores batches of c
   - `type: "sample"`
   - `id`
   - `metrics` with raw and normalized writing metrics
-  - `component_scores` with `preference_rubric`, `readability_style`, `repetition_variety`, `humanify_diagnostic`
+  - `component_scores` with `preference_rubric`, `readability_style`, `repetition_variety`, `lynceus_diagnostic`
   - `composite_score`
   - `detectors` with detector/model/probability diagnostics only
   - `errors: []`
@@ -64,8 +64,8 @@ Implement a deterministic, metrics-only evaluation mode that scores batches of c
   - aggregate metric `mean`, `std`, `min`, `max` where applicable
   - `weights`
   - `preference_correlation` with `pair_count`, `non_tie_count`, `tie_count`, `agreement`, `pearson`, `spearman`
-- Composite formula: `0.40 * preference_rubric + 0.25 * readability_style + 0.20 * repetition_variety + 0.15 * humanify_diagnostic`.
-- Diagnostic conversion: `humanify_diagnostic = 1.0 - normalized_ai_probability`.
+- Composite formula: `0.40 * preference_rubric + 0.25 * readability_style + 0.20 * repetition_variety + 0.15 * lynceus_diagnostic`.
+- Diagnostic conversion: `lynceus_diagnostic = 1.0 - normalized_ai_probability`.
 - Undefined numeric values: JSON `null`.
 - Blank JSONL lines: ignored.
 - Malformed JSON, missing required fields, empty required string fields, and duplicate sample IDs: nonzero exit with stderr error; do not emit partial success summary.
@@ -74,10 +74,10 @@ Implement a deterministic, metrics-only evaluation mode that scores batches of c
 
 ### Must NOT Have (guardrails, AI slop patterns, scope boundaries)
 - Do not add required LLM dependencies.
-- Do not call `analysis.generate_advice()` from `humanify/analysis.py:132-173` in eval mode.
-- Do not call `generate_llm_advice()` from `humanify/advice_llm.py:96-130` in eval mode.
-- Do not reuse `output_json()` from `humanify/output.py:47-91` for eval output because it always includes `advice` at `humanify/output.py:66-72`.
-- Do not change detector names or detector registration in `humanify/detectors/__init__.py:9-21`.
+- Do not call `analysis.generate_advice()` from `lynceus/analysis.py:132-173` in eval mode.
+- Do not call `generate_llm_advice()` from `lynceus/advice_llm.py:96-130` in eval mode.
+- Do not reuse `output_json()` from `lynceus/output.py:47-91` for eval output because it always includes `advice` at `lynceus/output.py:66-72`.
+- Do not change detector names or detector registration in `lynceus/detectors/__init__.py:9-21`.
 - Do not change existing single-run CLI behavior documented in `README.md:124-154`.
 - Do not add CI, coverage, dashboards, or heavy NLP packages in this plan.
 
@@ -126,20 +126,20 @@ Wave 6: Task 7 docs and final user-facing validation.
 - [ ] 1. Refactor CLI scoring into reusable single-text analysis without changing legacy behavior
 
   **What to do**:
-  - In `humanify/cli.py`, split current `main()` into:
-    - `_main_single(argv: list[str] | None) -> int` containing the existing single-input behavior from `humanify/cli.py:58-188`.
-    - `_load_detectors(model_names: list[str], *, model_id: str | None, device_name: str, suppress_stdout: bool) -> list[dict]` containing detector validation/loading currently represented by `humanify/cli.py:101-123`; each dict must include `name`, `detector`, and `model_id`.
-    - `_score_text(raw: str, *, loaded_detectors: list[dict], batch_size: int) -> dict` containing sentence preparation, detector scoring, score expansion, marker extraction, and ensemble stats currently represented by `humanify/cli.py:84-154`.
+  - In `lynceus/cli.py`, split current `main()` into:
+    - `_main_single(argv: list[str] | None) -> int` containing the existing single-input behavior from `lynceus/cli.py:58-188`.
+    - `_load_detectors(model_names: list[str], *, model_id: str | None, device_name: str, suppress_stdout: bool) -> list[dict]` containing detector validation/loading currently represented by `lynceus/cli.py:101-123`; each dict must include `name`, `detector`, and `model_id`.
+    - `_score_text(raw: str, *, loaded_detectors: list[dict], batch_size: int) -> dict` containing sentence preparation, detector scoring, score expansion, marker extraction, and ensemble stats currently represented by `lynceus/cli.py:84-154`.
     - `main(argv: list[str] | None = None) -> None` dispatching to eval only when the first argument is exactly `eval`; otherwise preserve legacy parsing.
-  - Keep `_resolve_device()` from `humanify/cli.py:28-34` and `_expand_unit_scores()` from `humanify/cli.py:36-55` as shared helpers.
-  - Preserve the existing single-run `os._exit(0)` workaround from `humanify/cli.py:190-196` only after successful legacy single-text output; eval mode must return through normal exit-code handling so tests can call it safely.
+  - Keep `_resolve_device()` from `lynceus/cli.py:28-34` and `_expand_unit_scores()` from `lynceus/cli.py:36-55` as shared helpers.
+  - Preserve the existing single-run `os._exit(0)` workaround from `lynceus/cli.py:190-196` only after successful legacy single-text output; eval mode must return through normal exit-code handling so tests can call it safely.
   - `_load_detectors()` must be called once by batch eval and once per legacy single-text CLI invocation; `_score_text()` must never load models.
   - `_score_text()` must return sentences, scoring units, per-sentence probabilities, markers, stats, model label, and per-detector summaries. It must not generate advice.
   - Extend `tests/test_cli.py` with fake detector coverage for `_score_text()` and dispatch behavior without loading transformer models.
   **Must NOT do**:
   - Do not change root options documented in `README.md:124-154`.
   - Do not call `output_json()` or `output_rich()` from `_score_text()`.
-  - Do not make `humanify eval` share the legacy `os._exit(0)` path.
+  - Do not make `lynceus eval` share the legacy `os._exit(0)` path.
 
   **Recommended Agent Profile**:
   - Category: `unspecified-high` - Reason: shared CLI refactor with regression risk.
@@ -149,17 +149,17 @@ Wave 6: Task 7 docs and final user-facing validation.
   **Parallelization**: Can Parallel: NO | Wave 1 | Blocks: [5, 6] | Blocked By: []
 
   **References** (executor has NO interview context - be exhaustive):
-  - Pattern: `humanify/cli.py:58-82` - current argparse setup and legacy flags.
-  - Pattern: `humanify/cli.py:84-154` - input preparation, detector loading/scoring, ensemble stats.
-  - Pattern: `humanify/cli.py:156-178` - advice generation path that eval must not enter.
-  - Pattern: `humanify/cli.py:180-196` - output and `os._exit(0)` behavior to preserve for legacy path only.
+  - Pattern: `lynceus/cli.py:58-82` - current argparse setup and legacy flags.
+  - Pattern: `lynceus/cli.py:84-154` - input preparation, detector loading/scoring, ensemble stats.
+  - Pattern: `lynceus/cli.py:156-178` - advice generation path that eval must not enter.
+  - Pattern: `lynceus/cli.py:180-196` - output and `os._exit(0)` behavior to preserve for legacy path only.
   - Test: `tests/test_cli.py:7-29` - current unittest style and helper tests.
-  - API/Type: `humanify/detectors/base.py:6-19` - detector interface contract.
+  - API/Type: `lynceus/detectors/base.py:6-19` - detector interface contract.
 
   **Acceptance Criteria** (agent-executable only):
   - [ ] `uv run python -m unittest tests.test_cli` exits `0`.
   - [ ] `uv run python -m unittest discover tests` exits `0`.
-  - [ ] `uv run python -m compileall humanify tests` exits `0`.
+  - [ ] `uv run python -m compileall lynceus tests` exits `0`.
   - [ ] A unit test proves `_score_text()` does not call `analysis.generate_advice()` or `advice_llm.generate_llm_advice()`.
   - [ ] A unit test proves legacy `_main_single()` still rejects empty input with exit code `1` and stderr text matching `no input text provided`.
 
@@ -178,12 +178,12 @@ Wave 6: Task 7 docs and final user-facing validation.
     Evidence: .omo/evidence/task-1-cli-refactor-no-advice.txt
   ```
 
-  **Commit**: YES | Message: `refactor(cli): expose reusable scoring path` | Files: [`humanify/cli.py`, `tests/test_cli.py`]
+  **Commit**: YES | Message: `refactor(cli): expose reusable scoring path` | Files: [`lynceus/cli.py`, `tests/test_cli.py`]
 
 - [ ] 2. Add JSONL evaluation schemas, validation, and fixtures
 
   **What to do**:
-  - Add `humanify/eval_io.py` with deterministic schema helpers:
+  - Add `lynceus/eval_io.py` with deterministic schema helpers:
     - `SCHEMA_VERSION = 1`.
     - `EvalSample` and `PreferencePair` dataclasses or typed dictionaries.
     - `parse_eval_samples_jsonl(text: str, source: str) -> list[EvalSample]` and `load_eval_samples(path: str) -> list[EvalSample]`.
@@ -214,7 +214,7 @@ Wave 6: Task 7 docs and final user-facing validation.
   **Parallelization**: Can Parallel: YES | Wave 2 | Blocks: [5, 6] | Blocked By: []
 
   **References** (executor has NO interview context - be exhaustive):
-  - Pattern: `humanify/output.py:47-91` - existing JSON assembly style, but do not reuse because it injects advice.
+  - Pattern: `lynceus/output.py:47-91` - existing JSON assembly style, but do not reuse because it injects advice.
   - Pattern: `tests/test_analysis.py:1-15` - fixture reading with `Path` and unittest style.
   - Pattern: `tests/test_advice_llm.py:19-21` - `subTest` style for multiple cases.
   - External: `https://jsonlines.org/` - JSON Lines convention: one valid JSON value per line.
@@ -241,13 +241,13 @@ Wave 6: Task 7 docs and final user-facing validation.
     Evidence: .omo/evidence/task-2-eval-io-errors.txt
   ```
 
-  **Commit**: YES | Message: `feat(eval): add jsonl schema validation` | Files: [`humanify/eval_io.py`, `tests/test_eval_io.py`, `tests/fixtures/eval_input.jsonl`, `tests/fixtures/eval_invalid.jsonl`, `tests/fixtures/eval_duplicate_ids.jsonl`, `tests/fixtures/preference_labels.jsonl`]
+  **Commit**: YES | Message: `feat(eval): add jsonl schema validation` | Files: [`lynceus/eval_io.py`, `tests/test_eval_io.py`, `tests/fixtures/eval_input.jsonl`, `tests/fixtures/eval_invalid.jsonl`, `tests/fixtures/eval_duplicate_ids.jsonl`, `tests/fixtures/preference_labels.jsonl`]
 
 - [ ] 3. Add deterministic non-detector writing metrics
 
   **What to do**:
-  - Add `humanify/writing_metrics.py` with `compute_writing_metrics(prompt: str, candidate: str, reference: str | None = None) -> dict`.
-  - Reuse `split_sentences()` and `normalize_for_detection()` from `humanify/analysis.py:45-60`, but add fallback behavior inside `writing_metrics.py`: if `split_sentences(candidate)` returns empty for non-empty candidate, treat the normalized candidate as one short sentence for metric denominators.
+  - Add `lynceus/writing_metrics.py` with `compute_writing_metrics(prompt: str, candidate: str, reference: str | None = None) -> dict`.
+  - Reuse `split_sentences()` and `normalize_for_detection()` from `lynceus/analysis.py:45-60`, but add fallback behavior inside `writing_metrics.py`: if `split_sentences(candidate)` returns empty for non-empty candidate, treat the normalized candidate as one short sentence for metric denominators.
   - Use lightweight regex tokenization only; do not add dependencies beyond existing `pyproject.toml:9-14`.
   - Implement raw and normalized metrics:
     - `readability`: Flesch Reading Ease using heuristic syllable count; normalized as `clamp((raw + 20) / 120, 0, 1)`.
@@ -270,9 +270,9 @@ Wave 6: Task 7 docs and final user-facing validation.
   **Parallelization**: Can Parallel: YES | Wave 2 | Blocks: [4, 5] | Blocked By: []
 
   **References** (executor has NO interview context - be exhaustive):
-  - Pattern: `humanify/analysis.py:45-60` - normalization and sentence splitting to reuse.
-  - Pattern: `humanify/analysis.py:118-129` - repeated opener logic that can inspire repetition metrics without advice text.
-  - Guardrail: `humanify/analysis.py:132-173` - advice generation not allowed in eval metrics.
+  - Pattern: `lynceus/analysis.py:45-60` - normalization and sentence splitting to reuse.
+  - Pattern: `lynceus/analysis.py:118-129` - repeated opener logic that can inspire repetition metrics without advice text.
+  - Guardrail: `lynceus/analysis.py:132-173` - advice generation not allowed in eval metrics.
   - Test: `tests/test_analysis.py:7-51` - unittest assertions for deterministic text-analysis helpers.
   - Dependency boundary: `pyproject.toml:9-14` - do not add heavy dependencies.
 
@@ -298,12 +298,12 @@ Wave 6: Task 7 docs and final user-facing validation.
     Evidence: .omo/evidence/task-3-writing-metrics-edge.txt
   ```
 
-  **Commit**: YES | Message: `feat(eval): add deterministic writing metrics` | Files: [`humanify/writing_metrics.py`, `tests/test_writing_metrics.py`]
+  **Commit**: YES | Message: `feat(eval): add deterministic writing metrics` | Files: [`lynceus/writing_metrics.py`, `tests/test_writing_metrics.py`]
 
 - [ ] 4. Add composite scoring, aggregation, and human preference correlation
 
   **What to do**:
-  - Add `humanify/eval_scoring.py` with pure deterministic functions:
+  - Add `lynceus/eval_scoring.py` with pure deterministic functions:
     - `component_scores(metrics: dict, detector_stats: dict | None) -> dict`.
     - `composite_score(components: dict) -> float | None`.
     - `aggregate_samples(sample_records: list[dict]) -> dict`.
@@ -314,8 +314,8 @@ Wave 6: Task 7 docs and final user-facing validation.
     - `preference_rubric = 0.45*coherence_rubric + 0.25*style_consistency + 0.15*readability + 0.10*lexical_diversity + 0.05*repetition`.
     - `readability_style = mean(readability, lexical_diversity, style_consistency)` ignoring `None` values; `None` only if all inputs are `None`.
     - `repetition_variety = mean(repetition, sentence_variety)` ignoring `None` values.
-    - `humanify_diagnostic = 1.0 - detector_stats["mean"]` when detector stats exist; otherwise `None`.
-    - `composite_score = 0.40*preference_rubric + 0.25*readability_style + 0.20*repetition_variety + 0.15*humanify_diagnostic`; if `humanify_diagnostic` is `None`, re-normalize over available component weights and include `weights_applied` in output.
+    - `lynceus_diagnostic = 1.0 - detector_stats["mean"]` when detector stats exist; otherwise `None`.
+    - `composite_score = 0.40*preference_rubric + 0.25*readability_style + 0.20*repetition_variety + 0.15*lynceus_diagnostic`; if `lynceus_diagnostic` is `None`, re-normalize over available component weights and include `weights_applied` in output.
   - Preference correlation behavior:
     - For each non-tie pair, compute candidate A and B composite scores with the same metrics pipeline.
     - Predicted preference: `"a"` if `score_a > score_b`, `"b"` if `score_b > score_a`, `"tie"` if equal after rounding to 6 decimals.
@@ -335,10 +335,10 @@ Wave 6: Task 7 docs and final user-facing validation.
   **Parallelization**: Can Parallel: NO | Wave 3 | Blocks: [5] | Blocked By: [3]
 
   **References** (executor has NO interview context - be exhaustive):
-  - Pattern: `humanify/cli.py:127-135` - existing stats dictionary shape: mean/std/min/max.
-  - Pattern: `humanify/cli.py:145-152` - existing ensemble mean/std/min/max aggregation style.
-  - Pattern: `humanify/output.py:62-64` - current rounded score serialization style to mirror for stable display values.
-  - Input: Task 3 `humanify/writing_metrics.py` normalized metric contract.
+  - Pattern: `lynceus/cli.py:127-135` - existing stats dictionary shape: mean/std/min/max.
+  - Pattern: `lynceus/cli.py:145-152` - existing ensemble mean/std/min/max aggregation style.
+  - Pattern: `lynceus/output.py:62-64` - current rounded score serialization style to mirror for stable display values.
+  - Input: Task 3 `lynceus/writing_metrics.py` normalized metric contract.
 
   **Acceptance Criteria** (agent-executable only):
   - [ ] `uv run python -m unittest tests.test_eval_scoring` exits `0`.
@@ -362,14 +362,14 @@ Wave 6: Task 7 docs and final user-facing validation.
     Evidence: .omo/evidence/task-4-preference-correlation.txt
   ```
 
-  **Commit**: YES | Message: `feat(eval): add composite scoring and preference correlation` | Files: [`humanify/eval_scoring.py`, `tests/test_eval_scoring.py`]
+  **Commit**: YES | Message: `feat(eval): add composite scoring and preference correlation` | Files: [`lynceus/eval_scoring.py`, `tests/test_eval_scoring.py`]
 
 - [ ] 5. Add batch evaluator engine that emits metrics-only sample and summary records
 
   **What to do**:
-  - Add `humanify/evaluator.py` with `run_eval(input_path: str, preferences_path: str | None, *, model: str, model_id: str | None, batch_size: int, device: str, output_stream, error_stream) -> int`.
+  - Add `lynceus/evaluator.py` with `run_eval(input_path: str, preferences_path: str | None, *, model: str, model_id: str | None, batch_size: int, device: str, output_stream, error_stream) -> int`.
   - Load eval samples with `eval_io.load_eval_samples()` for paths and `eval_io.parse_eval_samples_jsonl(stdin_text, "<stdin>")` when `input_path == "-"`; load optional preferences with `eval_io.load_preference_pairs()`.
-  - Load detectors once per evaluator invocation using `_load_detectors()` from Task 1; pass the resulting `loaded_detectors` into `_score_text()` for each sample. Preserve detector choices from `humanify/detectors/__init__.py:9-14` and detector contract from `humanify/detectors/base.py:6-19`.
+  - Load detectors once per evaluator invocation using `_load_detectors()` from Task 1; pass the resulting `loaded_detectors` into `_score_text()` for each sample. Preserve detector choices from `lynceus/detectors/__init__.py:9-14` and detector contract from `lynceus/detectors/base.py:6-19`.
   - For each sample in input order:
     - compute detector diagnostics via `_score_text()`;
     - compute writing metrics via `compute_writing_metrics()`;
@@ -379,12 +379,12 @@ Wave 6: Task 7 docs and final user-facing validation.
   - If `preferences_path is None`, summary must still include `preference_correlation` exactly as `{"pair_count": 0, "non_tie_count": 0, "tie_count": 0, "agreement": None, "pearson": None, "spearman": None}` before JSON serialization.
   - Error behavior:
     - Validation errors before scoring: print deterministic message to stderr and return `2`.
-    - Unknown detector/model errors: match existing unknown detector style from `humanify/cli.py:103-106` where possible and return `1`.
+    - Unknown detector/model errors: match existing unknown detector style from `lynceus/cli.py:103-106` where possible and return `1`.
     - Detector failure during scoring: print deterministic stderr message with sample id and return `1`; do not emit misleading summary.
   - Add `tests/test_evaluator.py` using fake detector injection/patching so tests never download Hugging Face models.
   **Must NOT do**:
-  - Do not call `output_json()` from `humanify/output.py:47-91` because it includes `advice`.
-  - Do not call `output_rich()` from `humanify/output.py:94-174`.
+  - Do not call `output_json()` from `lynceus/output.py:47-91` because it includes `advice`.
+  - Do not call `output_rich()` from `lynceus/output.py:94-174`.
   - Do not print progress bars or rich output in eval mode.
   - Do not include advice/rewrite/evasion keys or strings anywhere in records.
 
@@ -396,9 +396,9 @@ Wave 6: Task 7 docs and final user-facing validation.
   **Parallelization**: Can Parallel: NO | Wave 4 | Blocks: [6, 7] | Blocked By: [1, 2, 3, 4]
 
   **References** (executor has NO interview context - be exhaustive):
-  - Pattern: `humanify/cli.py:101-137` - detector validation/load/score loop.
-  - Pattern: `humanify/cli.py:139-154` - ensemble score aggregation.
-  - Guardrail: `humanify/output.py:66-72` - existing advice key forbidden in eval output.
+  - Pattern: `lynceus/cli.py:101-137` - detector validation/load/score loop.
+  - Pattern: `lynceus/cli.py:139-154` - ensemble score aggregation.
+  - Guardrail: `lynceus/output.py:66-72` - existing advice key forbidden in eval output.
   - Test: `tests/test_cli.py:17-29` - fake scoring helper tests can be extended for evaluator patching.
   - Fixture: `tests/fixtures/eval_input.jsonl` from Task 2.
   - Fixture: `tests/fixtures/preference_labels.jsonl` from Task 2.
@@ -426,28 +426,28 @@ Wave 6: Task 7 docs and final user-facing validation.
     Evidence: .omo/evidence/task-5-evaluator-no-advice.txt
   ```
 
-  **Commit**: YES | Message: `feat(eval): add batch evaluator engine` | Files: [`humanify/evaluator.py`, `tests/test_evaluator.py`]
+  **Commit**: YES | Message: `feat(eval): add batch evaluator engine` | Files: [`lynceus/evaluator.py`, `tests/test_evaluator.py`]
 
-- [ ] 6. Wire `humanify eval` CLI subcommand and help text
+- [ ] 6. Wire `lynceus eval` CLI subcommand and help text
 
   **What to do**:
-  - In `humanify/cli.py`, implement dispatch so:
-    - `humanify eval --help` shows eval-specific help.
-    - `humanify eval --input tests/fixtures/eval_input.jsonl` runs `evaluator.run_eval(...)`.
-    - `humanify eval -i tests/fixtures/eval_input.jsonl --preferences tests/fixtures/preference_labels.jsonl` is equivalent long/short input syntax.
-    - `humanify eval --input -` reads eval JSONL from stdin.
+  - In `lynceus/cli.py`, implement dispatch so:
+    - `lynceus eval --help` shows eval-specific help.
+    - `lynceus eval --input tests/fixtures/eval_input.jsonl` runs `evaluator.run_eval(...)`.
+    - `lynceus eval -i tests/fixtures/eval_input.jsonl --preferences tests/fixtures/preference_labels.jsonl` is equivalent long/short input syntax.
+    - `lynceus eval --input -` reads eval JSONL from stdin.
   - Eval flags:
     - `--input`, `-i`: required path or `-` for stdin.
     - `--preferences`: optional preference-label JSONL path.
-    - `--model`, `-m`: same default `tmr` and comma-separated ensemble behavior as `humanify/cli.py:67-69`.
-    - `--model-id`: same override behavior as `humanify/cli.py:70-71`.
-    - `--batch-size`, `-b`: same default `32` as `humanify/cli.py:74-75`.
-    - `--device`, `-d`: same choices/default as `humanify/cli.py:76-78`.
+    - `--model`, `-m`: same default `tmr` and comma-separated ensemble behavior as `lynceus/cli.py:67-69`.
+    - `--model-id`: same override behavior as `lynceus/cli.py:70-71`.
+    - `--batch-size`, `-b`: same default `32` as `lynceus/cli.py:74-75`.
+    - `--device`, `-d`: same choices/default as `lynceus/cli.py:76-78`.
   - Eval mode must not expose `--advice`; advice is forbidden by design.
-  - Preserve legacy root help from `README.md:124-154`; do not force users to write `humanify analyze` or similar.
+  - Preserve legacy root help from `README.md:124-154`; do not force users to write `lynceus analyze` or similar.
   - Add `tests/test_eval_cli.py` with patched `evaluator.run_eval()` and patched `sys.argv`/streams to verify dispatch, help, required input, stdin path, and absence of `--advice` in eval help.
   **Must NOT do**:
-  - Do not break `python -m humanify`; `humanify/__main__.py` must continue to call the CLI entrypoint.
+  - Do not break `python -m lynceus`; `lynceus/__main__.py` must continue to call the CLI entrypoint.
   - Do not add `--json` to eval mode; JSONL is always the eval output format.
   - Do not make eval output rich/colorized.
 
@@ -459,46 +459,46 @@ Wave 6: Task 7 docs and final user-facing validation.
   **Parallelization**: Can Parallel: NO | Wave 5 | Blocks: [7] | Blocked By: [1, 2, 5]
 
   **References** (executor has NO interview context - be exhaustive):
-  - Pattern: `humanify/cli.py:58-82` - current argparse options to preserve for legacy path.
-  - Pattern: `pyproject.toml:21-22` - installed script entrypoint remains `humanify.cli:main`.
-  - Pattern: `humanify/__main__.py:1-5` - module execution entrypoint; verify unchanged unless needed.
+  - Pattern: `lynceus/cli.py:58-82` - current argparse options to preserve for legacy path.
+  - Pattern: `pyproject.toml:21-22` - installed script entrypoint remains `lynceus.cli:main`.
+  - Pattern: `lynceus/__main__.py:1-5` - module execution entrypoint; verify unchanged unless needed.
   - Docs: `README.md:124-154` - current CLI reference must remain true.
   - Test: `tests/test_cli.py:1-32` - CLI unittest style.
 
   **Acceptance Criteria** (agent-executable only):
   - [ ] `uv run python -m unittest tests.test_eval_cli` exits `0`.
   - [ ] `uv run python -m unittest discover tests` exits `0`.
-  - [ ] `uv run humanify --help` exits `0` and includes `--advice`.
-  - [ ] `uv run humanify eval --help` exits `0`, includes `--input`, `--preferences`, `--model`, and does not include `--advice`.
-  - [ ] `uv run python -m compileall humanify tests` exits `0`.
+  - [ ] `uv run lynceus --help` exits `0` and includes `--advice`.
+  - [ ] `uv run lynceus eval --help` exits `0`, includes `--input`, `--preferences`, `--model`, and does not include `--advice`.
+  - [ ] `uv run python -m compileall lynceus tests` exits `0`.
 
   **QA Scenarios** (MANDATORY - task incomplete without these):
   ```
   Scenario: Eval help exposes metrics-only interface
     Tool: Bash
-    Steps: Run `uv run humanify eval --help`
+    Steps: Run `uv run lynceus eval --help`
     Expected: Command exits 0; stdout includes `--input` and `--preferences`; stdout does not include `--advice`.
     Evidence: .omo/evidence/task-6-eval-help.txt
 
   Scenario: Legacy help remains backward compatible
     Tool: Bash
-    Steps: Run `uv run humanify --help`
+    Steps: Run `uv run lynceus --help`
     Expected: Command exits 0; stdout still includes `--file`, `--json`, `--model`, `--advice`.
     Evidence: .omo/evidence/task-6-legacy-help.txt
   ```
 
-  **Commit**: YES | Message: `feat(cli): add eval subcommand` | Files: [`humanify/cli.py`, `tests/test_eval_cli.py`]
+  **Commit**: YES | Message: `feat(cli): add eval subcommand` | Files: [`lynceus/cli.py`, `tests/test_eval_cli.py`]
 
 - [ ] 7. Document evaluation mode, schemas, examples, and safety boundaries
 
   **What to do**:
   - Update `README.md` with a new `Evaluation mode` section after the current JSON output section at `README.md:197-248`.
   - Document command examples:
-    - `uv run humanify eval --input tests/fixtures/eval_input.jsonl`
-    - `uv run humanify eval --input tests/fixtures/eval_input.jsonl --preferences tests/fixtures/preference_labels.jsonl`
+    - `uv run lynceus eval --input tests/fixtures/eval_input.jsonl`
+    - `uv run lynceus eval --input tests/fixtures/eval_input.jsonl --preferences tests/fixtures/preference_labels.jsonl`
   - Document input sample schema, preference schema, per-sample output fields, final summary fields, and composite weights.
   - Explicitly state eval mode is metrics-only: no rewrite advice, no suggestions for avoiding detection, no LLM judge dependency.
-  - Update CLI reference section around `README.md:124-154` to mention `humanify eval --help` without replacing the legacy root usage block.
+  - Update CLI reference section around `README.md:124-154` to mention `lynceus eval --help` without replacing the legacy root usage block.
   - Update development/testing section around `README.md:348-365` only if new test files/fixtures need mention; keep existing commands unchanged.
   - Add or extend a test that reads README text and asserts the eval examples mention `--input`, `--preferences`, metrics-only, and do not contain detection-evasion phrasing.
   **Must NOT do**:
@@ -521,8 +521,8 @@ Wave 6: Task 7 docs and final user-facing validation.
 
   **Acceptance Criteria** (agent-executable only):
   - [ ] `uv run python -m unittest discover tests` exits `0`.
-  - [ ] `uv run python -m compileall humanify tests` exits `0`.
-  - [ ] README includes `humanify eval --input` and `--preferences` examples.
+  - [ ] `uv run python -m compileall lynceus tests` exits `0`.
+  - [ ] README includes `lynceus eval --input` and `--preferences` examples.
   - [ ] README describes composite weights exactly as 40/25/20/15.
   - [ ] README states eval mode is metrics-only and does not provide rewrite advice or detection-avoidance suggestions.
 

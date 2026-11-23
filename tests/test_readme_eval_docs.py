@@ -48,7 +48,7 @@ class ReadmeLegacyTest(unittest.TestCase):
     def test_eval_subcommand_mentioned_in_cli_reference(self):
         # The CLI reference section (before ## Detectors) mentions eval
         cli_ref_section = README[:README.find("## Detectors")]
-        self.assertIn("humanify eval --help", cli_ref_section)
+        self.assertIn("lynceus eval --help", cli_ref_section)
 
 
 if __name__ == "__main__":

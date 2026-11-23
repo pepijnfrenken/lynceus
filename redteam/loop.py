@@ -6,11 +6,11 @@ Takes AI-generated text, applies transformation strategies,
 and checks if they evade detection. Logs everything for analysis.
 
 Usage:
-    # Basic loop with local Humanify only
+    # Basic loop with local Lynceus only
     python redteam/loop.py --input redteam/samples/ai_text.txt
 
     # With external detectors (rate-limited)
-    python redteam/loop.py --input redteam/samples/ai_text.txt --detectors humanify,gptzero
+    python redteam/loop.py --input redteam/samples/ai_text.txt --detectors lynceus,gptzero
 
     # Specify max iterations
     python redteam/loop.py --input redteam/samples/ai_text.txt --max-iter 50
@@ -42,7 +42,7 @@ from redteam.transforms import (
 )
 from redteam.detectors import (
     DetectionResult,
-    HumanifyDetector,
+    LynceusDetector,
     GPTZeroDetector,
     StealthWriterDetector,
 )
@@ -68,7 +68,7 @@ class RedTeamConfig:
     target_score: float = 0.5       # Target AI probability (below this = pass)
     max_iterations: int = 100
     iterations_per_strategy: int = 5  # How many times to try each strategy
-    detectors: list[str] = field(default_factory=lambda: ["humanify"])
+    detectors: list[str] = field(default_factory=lambda: ["lynceus"])
     device: str = "cpu"
     model: str = "tmr"
     ollama_model: str = "qwen3:1.7b"  # Model for LLM-based rewrites
@@ -98,8 +98,8 @@ class RedTeamLoop:
     def _init_detectors(self) -> dict:
         """Initialize requested detectors."""
         dets = {}
-        if "humanify" in self.config.detectors:
-            dets["humanify"] = HumanifyDetector(
+        if "lynceus" in self.config.detectors:
+            dets["lynceus"] = LynceusDetector(
                 model=self.config.model,
                 device=self.config.device,
             )
@@ -116,12 +116,12 @@ class RedTeamLoop:
             results[name] = detector.detect(text)
         return results
     
-    def _humanify_score(self, text: str) -> float:
-        """Run only the local Humanify detector and return its AI probability.
+    def _lynceus_score(self, text: str) -> float:
+        """Run only the local Lynceus detector and return its AI probability.
 
         Returns 1.0 (worst) on any detector error / missing detector so
         injected score callables never raise on a broken local back end."""
-        res = self.detect(text).get("humanify")
+        res = self.detect(text).get("lynceus")
         if res is None or res.error or res.ai_probability < 0:
             return 1.0
         return res.ai_probability
@@ -169,13 +169,13 @@ class RedTeamLoop:
         elif strategy == "paraphrase_verify":
             from redteam.transforms import paraphrase_with_verify
             result, _score, _rounds = paraphrase_with_verify(
-                text, model=self.config.ollama_model, detect_fn=self._humanify_score,
+                text, model=self.config.ollama_model, detect_fn=self._lynceus_score,
             )
             return result, ["paraphrase_verify"]
         elif strategy == "guided_optimize":
             from redteam.transforms import guided_optimize
             result, _score, _used = guided_optimize(
-                text, model=self.config.ollama_model, score_fn=self._humanify_score,
+                text, model=self.config.ollama_model, score_fn=self._lynceus_score,
             )
             return result, ["guided_optimize"]
         # --- classic strategies ---
@@ -252,7 +252,7 @@ class RedTeamLoop:
         # First, score the original text
         print("📝 Scoring original text...")
         orig_results = self.detect(input_text)
-        orig_score = orig_results.get("humanify", DetectionResult("humanify", -1.0)).ai_probability
+        orig_score = orig_results.get("lynceus", DetectionResult("lynceus", -1.0)).ai_probability
         print(f"   Original AI probability: {orig_score:.3f}")
         print()
         
@@ -307,12 +307,12 @@ class RedTeamLoop:
                         all_pass = False
             
             # Track best
-            humanify_score = scores.get("humanify", 1.0)
-            if 0 <= humanify_score < self.best_score:
-                self.best_score = humanify_score
+            lynceus_score = scores.get("lynceus", 1.0)
+            if 0 <= lynceus_score < self.best_score:
+                self.best_score = lynceus_score
                 self.best_text = transformed
                 self.best_strategy = strategy
-                print(f"   🏆 New best: {humanify_score:.3f} (strategy: {strategy})")
+                print(f"   🏆 New best: {lynceus_score:.3f} (strategy: {strategy})")
             
             # Log
             record = IterationRecord(
@@ -348,7 +348,7 @@ class RedTeamLoop:
         print(f"\n{'='*60}")
         print(f"📊 Red Team Summary")
         print(f"   Iterations: {self.iteration + 1}")
-        print(f"   Original score: {self.results[0].ai_probability.get('humanify', -1):.3f}" if self.results else "")
+        print(f"   Original score: {self.results[0].ai_probability.get('lynceus', -1):.3f}" if self.results else "")
         print(f"   Best score: {self.best_score:.3f}")
         print(f"   Best strategy: {self.best_strategy}")
         print(f"   Best text preview: {self.best_text[:150]}...")
@@ -357,7 +357,7 @@ class RedTeamLoop:
         # Strategy effectiveness
         strategy_scores: dict[str, list[float]] = {}
         for r in self.results:
-            s = r.ai_probability.get("humanify", -1.0)
+            s = r.ai_probability.get("lynceus", -1.0)
             if s >= 0:
                 strategy_scores.setdefault(r.strategy, []).append(s)
         
@@ -395,12 +395,12 @@ def main():
         help="Maximum iterations. Default: 100"
     )
     parser.add_argument(
-        "--detectors", "-d", default="humanify",
-        help="Comma-separated detector names. Default: humanify"
+        "--detectors", "-d", default="lynceus",
+        help="Comma-separated detector names. Default: lynceus"
     )
     parser.add_argument(
         "--model", "-m", default="tmr",
-        help="Humanify model. Default: tmr"
+        help="Lynceus model. Default: tmr"
     )
     parser.add_argument(
         "--device", default="cpu", choices=["cpu", "cuda"],

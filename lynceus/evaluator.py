@@ -142,7 +142,7 @@ def run_eval(
             "preference_rubric": 0.40,
             "readability_style": 0.25,
             "repetition_variety": 0.20,
-            "humanify_diagnostic": 0.15,
+            "lynceus_diagnostic": 0.15,
         },
         "preference_correlation": correlation_result
         or {

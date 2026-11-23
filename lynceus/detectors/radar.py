@@ -4,7 +4,7 @@ RADAR (arXiv:2307.03838) is an AI-text detector trained adversarially against a
 PPO paraphraser on Vicuna-7B-v1.1 generations. Despite the name it is a ~0.4B
 *RoBERTa-large* sequence classifier (``RobertaForSequenceClassification``,
 24 hidden layers, hidden_size 1024) - the "Vicuna-7B" refers to the generator,
-not the detector. Its value to humanify is paraphrase robustness: AUROC ~0.92
+not the detector. Its value to lynceus is paraphrase robustness: AUROC ~0.92
 on Vicuna-7B text *after* paraphrase attack vs ~0.65 for the OpenAI detector.
 
 # label convention (VERIFIED from the model card's reference inference code,

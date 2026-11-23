@@ -1,19 +1,19 @@
-"""Tests for the humanify eval CLI subcommand dispatch."""
+"""Tests for the lynceus eval CLI subcommand dispatch."""
 
 import io
 import unittest
 from unittest.mock import patch
 
-from humanify.cli import _main_eval, main
+from lynceus.cli import _main_eval, main
 
 
 class EvalCliDispatchTest(unittest.TestCase):
-    @patch("humanify.cli._main_eval")
+    @patch("lynceus.cli._main_eval")
     def test_main_dispatches_to_eval_when_first_arg_is_eval(self, mock_eval):
         main(["eval", "--input", "test.jsonl"])
         mock_eval.assert_called_once_with(["--input", "test.jsonl"])
 
-    @patch("humanify.cli._main_single", return_value=0)
+    @patch("lynceus.cli._main_single", return_value=0)
     def test_main_dispatches_to_legacy_when_not_eval(self, mock_single):
         with self.assertRaises(SystemExit):
             main(["--file", "test.txt"])
@@ -37,7 +37,7 @@ class LegacyHelpTest(unittest.TestCase):
                 main(["--help"])
         self.assertIn("--advice", stdout.getvalue())
 class EvalRequiredInputTest(unittest.TestCase):
-    @patch("humanify.evaluator.run_eval", return_value=0)
+    @patch("lynceus.evaluator.run_eval", return_value=0)
     def test_eval_with_minimal_args(self, mock_run):
         with self.assertRaises(SystemExit):
             _main_eval(["--input", "test.jsonl"])
@@ -45,7 +45,7 @@ class EvalRequiredInputTest(unittest.TestCase):
         args, _ = mock_run.call_args
         self.assertEqual(args[0], "test.jsonl")
 
-    @patch("humanify.evaluator.run_eval", return_value=0)
+    @patch("lynceus.evaluator.run_eval", return_value=0)
     def test_eval_stdin_input_uses_dash(self, mock_run):
         with self.assertRaises(SystemExit):
             _main_eval(["--input", "-"])
@@ -53,7 +53,7 @@ class EvalRequiredInputTest(unittest.TestCase):
         args, _ = mock_run.call_args
         self.assertEqual(args[0], "-")
 
-    @patch("humanify.evaluator.run_eval", return_value=0)
+    @patch("lynceus.evaluator.run_eval", return_value=0)
     def test_eval_passes_preferences_path(self, mock_run):
         with self.assertRaises(SystemExit):
             _main_eval(["--input", "in.jsonl", "--preferences", "prefs.jsonl"])

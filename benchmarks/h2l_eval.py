@@ -27,7 +27,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from benchmarks import _common as C
-from humanify.analysis import split_sentences
+from lynceus.analysis import split_sentences
 
 NAME = "h2l"
 OLLAMA_URL = "http://localhost:11434"

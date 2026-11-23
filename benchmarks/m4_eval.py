@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""M4 OOD robustness eval for humanify detectors.
+"""M4 OOD robustness eval for lynceus detectors.
 
 Loads the M4 test split from ``benchmarks/data/m4/`` (HF mirror
 ``d0rj/SemEval2024-task8``; text + label jsonl rows, 0=human / 1=machine),
@@ -26,7 +26,7 @@ REPO = "https://huggingface.co/datasets/d0rj/SemEval2024-task8"
 def main(argv=None):
     parser = C.add_eval_args(
         "benchmarks/m4_eval.py",
-        "M4 (OOD) robustness eval for humanify detectors.",
+        "M4 (OOD) robustness eval for lynceus detectors.",
         default_data_dir="benchmarks/data/m4",
         out_name="m4",
     )

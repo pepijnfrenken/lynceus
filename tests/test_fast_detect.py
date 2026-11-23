@@ -7,7 +7,7 @@ No model weights are downloaded here: ``load`` is not invoked, and the
 import unittest
 from unittest.mock import patch, MagicMock
 
-from humanify.detectors.fast_detect import FastDetectDetector
+from lynceus.detectors.fast_detect import FastDetectDetector
 
 
 class FastDetectModelIdTest(unittest.TestCase):

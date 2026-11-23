@@ -10,7 +10,7 @@ ensemble mean/std.
 
 Detectors download their weights on first load, so a cold run pulls a few GB.
 Usage:
-    cd /home/pino/humanify && .venv/bin/python scripts/bench_baseline.py
+    cd /home/pino/lynceus && .venv/bin/python scripts/bench_baseline.py
 """
 
 import argparse

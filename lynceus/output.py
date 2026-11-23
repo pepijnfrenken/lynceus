@@ -418,7 +418,7 @@ def output_rich(sentences: list[str], probs: list[float], markers: list[list[str
     body.append(" legal text, non-native English, pre-1900 literature.\n", style="dim")
     body.append(" Use as one signal among many.\n", style="dim")
     console.print(
-        Panel(body, title="[bold]humanify[/bold]", border_style="blue", expand=False)
+        Panel(body, title="[bold]lynceus[/bold]", border_style="blue", expand=False)
     )
 
 
@@ -473,7 +473,7 @@ def render_eval_summary(
             pref_s = _format_val(cs.get("preference_rubric"))
             read_s = _format_val(cs.get("readability_style"))
             rep_s  = _format_val(cs.get("repetition_variety"))
-            hu_s   = _format_val(cs.get("humanify_diagnostic"))
+            hu_s   = _format_val(cs.get("lynceus_diagnostic"))
             row = f"   {cid:<20s} {comp_s:>6s} {pref_s:>6s} {read_s:>6s} {rep_s:>6s} {hu_s:>6s}"
             if comp is not None:
                 color = "green" if comp >= 0.70 else ("yellow" if comp >= 0.40 else "red")
@@ -541,5 +541,5 @@ def render_eval_summary(
         body.append("\n")
 
     console.print(
-        Panel(body, title="[bold]humanify eval[/bold]", border_style="blue", expand=False)
+        Panel(body, title="[bold]lynceus eval[/bold]", border_style="blue", expand=False)
     )

@@ -1,1 +1,1 @@
-"""Humanify robustness evaluation harness (Phase 1)."""
+"""Lynceus robustness evaluation harness (Phase 1)."""
